@@ -1,4 +1,12 @@
-### 
+##################################################################
+##################################################################
+
+### This script generates Panel C results for the 
+### MOCHA manuscript. 
+
+##################################################################
+##################################################################
+
 require(data.table)
 require(ggplot2)
 
@@ -27,7 +35,8 @@ combined_df = combined_df[TotalPeaks > 4000]
 combined_df$Model = factor(combined_df$Model,
                            levels=c('ArchR', 'Signac','scMACS'))
 
-ggplot(combined_df,
+pdf('panelC_runtime.pdf')
+p <- ggplot(combined_df,
        aes(x=TotalPeaks,
            y=RunTime,
            col=Model,
@@ -41,6 +50,9 @@ ggplot(combined_df,
         axis.text.x = element_text(size=14, angle = 90),
         axis.text.y = element_text(size=14),
   )
+print(p)
+
+dev.off()
 
 get_ratios <- function(combined_df, ModelComparison){
   
@@ -53,5 +65,5 @@ get_ratios <- function(combined_df, ModelComparison){
   return(ratios)
 }
 
-get_ratios(combined_df, 'Signac')  
-get_ratios(combined_df, 'ArchR')  
+print(get_ratios(combined_df, 'Signac'))
+print(get_ratios(combined_df, 'ArchR') )
