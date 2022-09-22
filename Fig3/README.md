@@ -1,13 +1,15 @@
 # Figure 2 Readme 
 
-# Panel A 
+## Panel A: Venn Diagram 
 
-# Panel B
+Panel A includes the R script and output graph that shows the Venn Diagram for the R. 
 
-# Panel C 
+## Panel B: Stability of Analysis 
 
-# Panel D 
+## Panel C: RunTime Comparison
 
-# Panel E 
+## Panel D: Unique Hits 
 
-# Panel F 
+## Panel E: Unique Top Hits
+
+## Panel F-G: Zero Inflated Correlation  
