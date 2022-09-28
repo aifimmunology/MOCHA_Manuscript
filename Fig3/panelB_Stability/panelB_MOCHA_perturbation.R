@@ -7,194 +7,158 @@
 #
 # ###########################################################
 # ###########################################################
+
+# ###########################################################
+# ###########################################################
+
 ## Load Libraries
 require(scMACS)
-### Set directory
-setwd('/home/jupyter/covid/scMACS_manuscript_analyses/diff_analysis')
-source('/home/jupyter/scMACS/R/get_reproducible_peaks.R')
-source('/home/jupyter/scMACS/R/create_sample_peak_matrix.R')
-source('/home/jupyter/theme.R')
-require(ggpubr)
+require(ArchR)
 
-runTime = F
 ## Load the ArchR Project
-## and extract the metadata
-## object
-covidArchR <- loadArchRProject("/home/jupyter/FullCovid")
-metadf <- getCellColData(covidArchR)
-metadf_dt <- as.data.table(getCellColData(covidArchR)) 
+## and extract the metadata object
+ArchRProj <- loadArchRProject("/home/jupyter/FullCovid")
+metadata = as.data.table(getCellColData(ArchRProj))
+studySignal = median(metadata$nFrags)
 
-sample_metadata = metadf_dt[, list(Visit=first(Visit),
-                             Label=first(COVID_status),
-                             Days_since_symptoms=days_since_symptoms,                  
-                             Sample_CellType=first(new_cellType_sample)), 
-                            by=list(Sample, CellSubsets)
-                 ]
-sample_metadata
+# Define your annotation package for TxDb object(s)
+# and genome-wide annotation
+# Here our samples are human using hg38 as a reference.
+# For more info: https://bioconductor.org/packages/3.15/data/annotation/
 
-cellsubsets <- unique(sample_metadata$CellSubsets)
-# ###########################################################
-# ###########################################################
+library(TxDb.Hsapiens.UCSC.hg38.refGene)
+library(org.Hs.eg.db)
+TxDb <- TxDb.Hsapiens.UCSC.hg38.refGene
+Org <- org.Hs.eg.db
 
-## Subset to visit one 
-lookup_table <- unique(metadf[,c('Sample',
+###########################################################
+###########################################################
+
+## Get metadata information
+## at the sample level
+lookup_table <- unique(metadata[,c('Sample',
                                  'COVID_status',
-                                 'new_cellType_sample',
                                  'Visit',
                                  'days_since_symptoms'),       
                               with=F])
 
-visit_1 <- lookup_table[lookup_table$Visit =='FH3 COVID-19 Visit 1' & lookup_table$days_since_symptoms <= 15 | is.na(lookup_table$days_since_symptoms),]
+## Subset to visit 1 and extract samples
+samplesToKeep <- lookup_table$Sample[lookup_table$Visit =='FH3 COVID-19 Visit 1' & lookup_table$days_since_symptoms <= 15 | is.na(lookup_table$days_since_symptoms)]
 
-## filter out the cd14 monocytes population 
-metaFile <- visit_1[grep('CD16 Mono',visit_1$new_cellType_sample),]
-metaFile$SampleCellType <- metaFile$new_cellType_sample
-metaFile$Class =  metaFile$COVID_status
+## subset ArchR Project
+idxSample <- BiocGenerics::which(ArchRProj$Sample %in% samplesToKeep)
+cellsSample <- ArchRProj$cellNames[idxSample]
+ArchRProj <- ArchRProj[cellsSample, ]
 
+###########################################################
+# 2. Call open tiles (main peak calling step)
+#    and get sample-tile matrices
+#    for all specified cell populations
+###########################################################
+
+
+tileResults <- callOpenTiles( 
+    ArchRProj,
+    cellPopLabel = "CellSubsets" ,
+    cellPopulations = "CD16 Mono",
+    TxDb = TxDb,
+    Org = Org,
+    numCores = 20,
+    studySignal = studySignal
+)
+
+
+###########################################################
+# 3. Get consensus sample-tile matrices
+#    for all cell populations.
+#    These matrices are organized by cell population
+#    RangedSummarizedExperiment object and are the 
+#    primary input to downstream analyses.
+###########################################################
+
+SampleTileMatrices <- scMACS::getSampleTileMatrix( 
+    tileResults,
+    cellPopulations = "CD16 Mono",
+    groupColumn = "COVID_status",
+    threshold = 0.2,
+    NAtoZero = TRUE,
+    log2Intensity = TRUE
+)
+
+###########################################################
+# 4. Get differential accessibility for specific 
+#    cell populations. Here we are comparing MAIT  
+#    cells between samples where our groupColumn 
+#    "COVID_status" is Positive (our foreground) 
+#    to Negative samples (our background).
+###########################################################
+
+differentials <- getDifferentialAccessibleTiles(
+    SampleTileObj = SampleTileMatrices,
+    cellPopulation = "CD16 Mono",
+    groupColumn = "COVID_status",
+    foreground =  "Positive",
+    background =  "Negative",
+    fdrToDisplay = 0.2,
+    outputGRanges = FALSE,
+    numCores = 50
+)
 
 # ##########################################################
 # ##########################################################
-
-
-# ######################################################################
-# ######################################################################
-
-## set parameters for differential analyses 
-#cellType_sample <- metadf[,'new_cellType_sample']
-cellTypesToExport <- metaFile$SampleCellType 
-cellType_Samples= cellTypesToExport
-numCores=20
-metaColumn='new_cellType_sample'
-
-## call sample specific peaks 
-sample_specific_peaks <- callPeaks_by_sample(covidArchR, 
-                                metadf,
-                                cellType_Samples=cellTypesToExport,
-                                metaColumn=metaColumn,         
-                                returnAllPeaks=TRUE,
-                                numCores=numCores,
-                                returnFrags=T
-                     
-                     )
-NCells = sapply(sample_specific_peaks,
-                function(x)
-                    x[[1]]$numCells[1]
-                )
-
-reproduciblePeaks <- get_reproducible_peaks(sample_specific_peaks,
-                       metaFile,
-                       reproducibility=0.2,
-                       fname='cd16s_peaks.png')
-
-sample_peak_matrix <- create_peak_sampleMatrix(sample_specific_peaks,
-                         reproduciblePeaks$Union)
-
-
-###########################################################
-###########################################################
-if(runTime){
-peaks_to_test <- c(3, 229,
-                   4210, 20966,
-                   55251, 110009,
-                   162531,190779,
-                   204103)
-
-
-timeRuns <- lapply(peaks_to_test,
-       function(x){
-           
-        tmp_mat = sample_peak_matrix[ sample(nrow(sample_peak_matrix),x)]
-        time <- system.time(
-           differential_regions <- get_differential_accessible_regions(
-            tmp_mat,
-            metaFile, 
-            fdr_control=0.2, 
-            nCores=50)
-            )
-        time
-           
-           }
-       )
-
-timeRuns = data.table(do.call(rbind, timeRuns))
-timeRuns$PeaksTested = peaks_to_test
-timeRuns$RunTime = timeRuns$elapsed
-timeRuns$Model = 'scMACS'
-timeRuns =  timeRuns[, c('PeaksTested','RunTime','Model')]
-write.csv(timeRuns,
-          file='/home/jupyter/covid/scMACS_manuscript_analyses/diff_analysis/scMACS_runtime.csv',
-          row.names=F
-          )
-          
-    
-}
-
-###########################################################
-###########################################################
-       
-differential_regions <- get_differential_accessible_regions(
-    sample_peak_matrix,
-    metaFile, 
-    nCores=50)
-
-
-###########################################################
-###########################################################
 
 ###########################################################
 ###########################################################
 ### Remove one sample from the 
 # Plot sample-specific reproducible peaks
+
 fdr_threshold = 0.2
 nCores=50
-true_DAPs = differential_regions[FDR <= fdr_threshold]
-samples <- metaFile$SampleCellType
+true_DAPs = differentials[FDR <= fdr_threshold]
+samples = colnames(SampleTileMatrices)
 
 remove_one_sample <- function(xx){
-    tmp_meta <-  metaFile[metaFile$SampleCellType != xx ,]
-    tmp_matrix = sample_peak_matrix[, 
-                                    !names(sample_peak_matrix) 
-                                    %in% xx, with=F]
     
+    ### Remove one sample
+    ### from analysis 
+    tmp_STM = SampleTileMatrices[, !colnames(SampleTileMatrices) %in% xx]
 
-    ## Get group labels 
-    positive_samples <- tmp_meta$SampleCellType[tmp_meta$Class=='Positive']
-    group <- ifelse(names(tmp_matrix)[2:ncol(tmp_matrix)] %in% positive_samples,1,0)
+    ### re-run differentials 
+    tmp_differentials <- getDifferentialAccessibleTiles(
+        SampleTileObj = tmp_STM,
+        cellPopulation = "CD16 Mono",
+        groupColumn = "COVID_status",
+        foreground =  "Positive",
+        background =  "Negative",
+        fdrToDisplay = 0.2,
+        outputGRanges = FALSE,
+        numCores = 50
+    )
 
-    res_pvals = get_differential_accessible_regions(tmp_matrix,
-                                        tmp_meta, 55)
-    
-    # ## find significance 
-    sig_pvals = res_pvals[FDR <= fdr_threshold ]
-    sig_pvals[!sig_pvals$Peak %in% true_DAPs$Peak] -> tmp
-    sig_pvals[sig_pvals$Peak %in% true_DAPs$Peak] -> tmp2
-    
-    rm(tmp_meta, tmp_matrix)
+    tmp_differentials= tmp_differentials[FDR <= fdr_threshold]
+    ### return final results 
     pryr::mem_used()
-    
-    return(res_pvals)
-    
+    return(tmp_differentials)
+
 }
 
-results = mclapply(samples, function(x){
-    print(x)
-    remove_one_sample(x)
-    },
-                   mc.cores=4
+results = lapply(samples, 
+                   function(x){
+                        print(x)
+                        remove_one_sample(x)
+                        }
                  )
 
-###########################################################
-###########################################################
+# ##########################################################
+# ##########################################################
 
-# try 2 different threhsolds
-results_by_threshold <- function(tmp, alpha_thresh=0.2, true_DAPs){
+overlap_results<- function(tmp, true_DAPs){
     
-    curr_res_pvals = tmp
-    n_minus1 = curr_res_pvals[FDR <= alpha_thresh]
+    n_minus1 = tmp
     
-    common = intersect(n_minus1$Peak,true_DAPs$Peak)
-    unique = setdiff(n_minus1$Peak,true_DAPs$Peak)
-    missed = setdiff(true_DAPs$Peak,n_minus1$Peak)
+    common = intersect(n_minus1$Tile, true_DAPs$Tile)
+    unique = setdiff(n_minus1$Tile,   true_DAPs$Tile)
+    missed = setdiff(true_DAPs$Tile,  n_minus1$Tile)
     
     res = data.frame(Common = length(common),
                      Unique = length(unique),
@@ -213,10 +177,12 @@ results_by_threshold <- function(tmp, alpha_thresh=0.2, true_DAPs){
            )
 }
 
-###########################################################
-###########################################################
+
+
+# ##########################################################
+# ##########################################################
 # ## Get cumulative 
-### new peaks 
+# ## new peaks 
 
 get_new_peaks <- function(fdr.2){
      
@@ -233,14 +199,14 @@ get_new_peaks <- function(fdr.2){
                                     
     }
     return(count) 
-    
+
 } 
 
 get_conserved_peaks <- function(fdr.2){
      
     unique_cumulative=lapply(fdr.2, function(x) x$Regions$Common
                )
-    fullset = true_DAPs$Peak
+    fullset = true_DAPs$Tile
     count = numeric(0)
     for(i in 1:39){
     
@@ -250,30 +216,32 @@ get_conserved_peaks <- function(fdr.2){
                                     
     }
     return(count) 
-    
+
 }    
-    
-    
+
+
 ###########################################################
 ###########################################################
-thresh = fdr_threshold
-true_DAPs = differential_regions[FDR <= thresh]
+
 ### Threshold 1 
-fdr.2 = mclapply(1:length(results),
-               function(x) 
-                   results_by_threshold(results[[x]], thresh,true_DAPs ),
-                 mc.cores=10
-               )
-fdr.2.vals = rbindlist(lapply(fdr.2, function(x) x$Values
+results2 = lapply(results, 
+                   function(x){
+                        overlap_results(x, true_DAPs)
+                        }
+                 )
+
+results3 = rbindlist(lapply(results2, function(x) x$Values
                               )
                       )
-fdr.2.vals$CountUnique <- get_new_peaks(fdr.2)
-fdr.2.vals$RelativeUnique <- fdr.2.vals$CountUnique / nrow(true_DAPs)
-fdr.2.vals$F1 = 2 * (fdr.2.vals$Precision*fdr.2.vals$Recall)/(fdr.2.vals$Precision+fdr.2.vals$Recall)
-fdr.2.vals$Conserved_Recall = get_conserved_peaks(fdr.2)
-fdr.2.vals$Perc = fdr.2.vals$Conserved_Recall/nrow(true_DAPs)
-fdr.2.vals
-summary(fdr.2.vals)
+
+results3$CountUnique <- get_new_peaks(results2)
+results3$RelativeUnique <- results3$CountUnique / nrow(true_DAPs)
+results3$F1 = 2 * (results3$Precision*results3$Recall)/(results3$Precision+results3$Recall)
+
+results3$Conserved_Recall = get_conserved_peaks(results2)
+results3$Perc = fdr.2.vals$Conserved_Recall/nrow(true_DAPs)
+results3
+summary(results3)
 
 row1 = data.frame(
     Common = nrow(true_DAPs),
@@ -284,19 +252,15 @@ row1 = data.frame(
     CountUnique=0,
     RelativeUnique=0,
     F1=1,
-    Conserved_Recall=nrow(true_DAPs),
-    Perc = 1)
+    Conserved_Recall=nrow(true_DAPs)
+)
 
-fdr.2.vals = rbind(row1, fdr.2.vals)
+results3 = rbind(row1, results3)
 
-setwd('/home/jupyter/covid/scMACS_manuscript_analyses/sample_specific_analyses/dap_cd16')
-write.csv(fdr.2.vals,
-          file='n-1.daps.scmacs.csv',
+setwd('/home/jupyter/MOCHA_Manuscript/Fig3/panelB_Stability/')
+write.csv(results3,
+          file='n-1.daps.MOCHA.csv',
          row.names=F)
 
-write.csv(true_DAPs,
-          file='cd16_scmacs.csv',
-          row.names=F)
-
-###########################################################
-###########################################################                  
+# ##########################################################
+# ##########################################################                  

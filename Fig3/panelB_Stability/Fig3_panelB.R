@@ -19,13 +19,13 @@ require(ggpubr)
 
 ### load datasets
 archr = fread('n-1.daps.ArchR.csv')
-scMACS= fread('n-1.daps.MOCHA.csv')
-seurat= fread('n-1.daps.Signac.csv')
+MOCHA= fread('n-1.daps.MOCHA.csv')
+signac= fread('n-1.daps.Signac.csv')
 
 ########################################################################
 ########################################################################
 ### Global Comparisons
-scMACS$Conserved_Recall[1] <- scMACS$Common[1]
+MOCHA$Conserved_Recall[1] <- MOCHA$Common[1]
 archr$Conserved = archr$Recall * archr$PeakNumber[1]
 
 ### Extract Global
@@ -33,30 +33,30 @@ archr$Conserved = archr$Recall * archr$PeakNumber[1]
 
 df1= data.table(
   Iteration=rep(c(1:40),3),
-  ConservedPeaks= c(archr$Conserved, scMACS$Conserved_Recall, seurat$Conserved),
+  ConservedPeaks= c(archr$Conserved, MOCHA$Conserved_Recall, signac$Conserved),
   NewPeaks= c(archr$Unique+archr$PeakNumber[1], 
-              scMACS$CountUnique + scMACS$Common[1], 
-              seurat$Unique + seurat$Conserved[1]),
+              MOCHA$CountUnique + MOCHA$Common[1], 
+              signac$Unique + signac$Conserved[1]),
   Model = c(rep('Archr',nrow(archr)), 
-            rep('scMACS',nrow(scMACS)),
-            rep('Seurat',nrow(seurat)))
+            rep('MOCHA',nrow(MOCHA)),
+            rep('Signac',nrow(signac)))
 )
    
 
 ### Relative table
 df_relative = data.frame(
-  Model=c('ArchR','ArchR','Seurat','Seurat','scMACS','scMACS'),
+  Model=c('ArchR','ArchR','Signac','Signac','MOCHA','MOCHA'),
   Value=c(2.54, 0.2, .58, .36, 0.85, 0.6),
   Evaluation=rep(c('New','Conserved'),3)
 )
 df_relative$Model <- factor(df_relative$Model,
-                               levels=c('ArchR','Seurat','scMACS'))
+                               levels=c('ArchR','Signac','MOCHA'))
 
 ### Add +1 to make 
 ### size relative to 
 ### full peakset
 
-df1$Model <- factor(df1$Model, levels=c('Archr','Seurat','scMACS'))
+df1$Model <- factor(df1$Model, levels=c('Archr','Signac','MOCHA'))
 df2 = melt(df1, id.vars = c('Iteration','Model'))         
 df2$ModelEvaluation = paste(df2$Model,df2$variable,sep=':')
 
