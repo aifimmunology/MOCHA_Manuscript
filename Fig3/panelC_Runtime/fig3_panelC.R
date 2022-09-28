@@ -9,10 +9,11 @@
 
 require(data.table)
 require(ggplot2)
+setwd('/home/jupyter/MOCHA_Manuscript/Fig3/panelC_Runtime/')
 
 signac = fread('Seurat_RunTimeAnalysis.csv')
 archr = fread('ArchR_RunTime.csv')
-scmacs = fread('MOCHA_runtime.csv')
+MOCHA = fread('MOCHA_runtime.csv')
 
 ### format 
 signac = signac[, c('TotalPeaks','RunTime')]
@@ -25,15 +26,15 @@ archr$Model = 'ArchR'
 archr = archr[, c('TotalPeaks','RunTime','Model')]
 
 ### 
-scmacs$TotalPeaks = scmacs$PeaksTested
-scmacs = scmacs[, c('TotalPeaks','RunTime','Model')]
+MOCHA$TotalPeaks = MOCHA$PeaksTested
+MOCHA = MOCHA[, c('TotalPeaks','RunTime','Model')]
 
 ### combined data
-combined_df = rbind(archr, signac, scmacs)
+combined_df = rbind(archr, signac, MOCHA)
 combined_df = combined_df[TotalPeaks > 4000]
 
 combined_df$Model = factor(combined_df$Model,
-                           levels=c('ArchR', 'Signac','scMACS'))
+                           levels=c('ArchR', 'Signac','MOCHA'))
 
 pdf('panelC_runtime.pdf')
 p <- ggplot(combined_df,
@@ -61,7 +62,7 @@ get_ratios <- function(combined_df, ModelComparison){
                                     by='TotalPeaks')
   
   df$Ratio = df$RunTime.y/df$RunTime.x
-  ratios= df$Ratio[df$Model.x=='scMACS']
+  ratios= df$Ratio[df$Model.x=='MOCHA']
   return(ratios)
 }
 
