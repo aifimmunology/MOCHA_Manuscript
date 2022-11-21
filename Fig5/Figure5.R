@@ -1,3 +1,46 @@
+library(ArchR)
+library(MOCHA)
+library(stringr)
+library(doParallel)
+library(TxDb.Hsapiens.UCSC.hg38.refGene)
+library(org.Hs.eg.db)
+library(tidyverse)
+
+setwd('scMACS_Analysis')
+
+
+MonoDCE <- loadArchRProject('MonoDC_Edits')
+studySignal = 3628
+
+####################################################
+# 2. Call open tiles (main peak calling step)
+#    Done once for all specified cell populations
+####################################################
+
+
+tileResults <- MOCHA::callOpenTiles(
+    MonoDCE,
+    cellPopLabel = "predictedGroup_Co2",
+    cellPopulations= 'CD16 Mono',
+    TxDb = TxDb.Hsapiens.UCSC.hg38.refGene,
+    Org = org.Hs.eg.db,
+    studySignal = studySignal,
+    numCores = 25
+)
+
+saveRDS(tileResults, 'scMACS_tileResults_CD16.RDS')
+
+SampleTileObj <-  MOCHA::getSampleTileMatrix( 
+    tileResults,
+    groupColumn= 'InfectionStages',
+    threshold = 0.2,
+    numCores = 35,
+)
+SampleTileObj <- annotateTiles(SampleTileObj)
+
+saveRDS(SampleTileObj, 'scMACS_SampleTileMatrix.RDS')
+
+
 ###############################
 ### Add just time-related peaks
     
@@ -12,7 +55,9 @@ Time_Regs <- filter(varPeaks, MaxVar == 'Time')
 TimeRegs <- Time_Regs$Gene %>% sub("\\.",":",.) %>%
             sub("\\.","-", .) %>% StringsToGRanges()    
 
-CD16s <- subsetArchRProject(MonoDCE, cells = getCellNames(MonoDCE)[MonoDCE$predictedGroup_Co2 == 'CD16 Mono'],
+CD16s <- subsetArchRProject(MonoDCE, 
+                            cells = getCellNames(MonoDCE)[
+                                MonoDCE$predictedGroup_Co2 == 'CD16 Mono'],
                             outputDirectory = 'CD16sLong', dropCells = TRUE)
 saveArchRProject(CD16s)
 CD16s <- loadArchRProject('CD16sLong')
@@ -24,6 +69,12 @@ CD16s <- addIterativeLSI(CD16s,  useMatrix = "PeakMatrix", name = "TimeLSI",   i
 CD16s <- addUMAP(CD16s,  reducedDims ="TimeLSI",
   name = "Time_UMAP", force = TRUE)
 CD16sUMAP <- getEmbedding(CD16s, 'Time_UMAP')
+
+## Run LSI on tile matrix without specifically choosing time-related peaks
+CD16s <- addIterativeLSI(CD16s, name = "normLSI", force = TRUE)
+CD16s <- addUMAP(CD16s,  reducedDims ="normLSI",
+  name = "normUMAP", force = TRUE)
+
 kClustList <- mclapply(c(3:10), function(x){
     
                 kmeans(CD16sUMAP, centers =x, iter.max = 1000, nstart = 100)
@@ -60,21 +111,13 @@ CD16s <- addCellColData(CD16s, data = daysPSO, name = "DaysPSO", cells = getCell
 CD16s <- addCellColData(CD16s, data = kClustdf[,1], name = "kClusters", cells = rownames(kClustdf), force= TRUE)
 saveArchRProject(CD16s)
 
-pdf('All_CD16s_LongitudinalUMAP.pdf')
+pdf('All_CD16s_LongitudinalUMAP.pdf')                   
 plotEmbedding(CD16s, embedding = "Time_UMAP", name = "DaysPSO")
 plotEmbedding(CD16s, embedding = "Time_UMAP", name = "InfectionStages")
 plotEmbedding(CD16s, embedding = "Time_UMAP", name = "Clusters3")    
 plotEmbedding(CD16s, embedding = "Time_UMAP", name = "kClusters")    
 dev.off()
                    
-CD16s <- addSlingShotTrajectories(CD16s, useGroups = c('Early Infection', 'Late Infection', 
-                                                       'Recovery Phase', 'Uninfected'),
-                                  principalGroup = 'Early Infection', 
-                                  groupBy = 'InfectionStages',
-                                  reducedDims = 'TimeLSI',
-                                  embedding = 'Time_UMAP', force  = TRUE)
-                   
-#sudo apt-get install gdal-bin libgdal-dev
 MonocleTraj <- getMonocleTrajectories(
                   CD16s,
                   name = "Trajectory",
@@ -89,271 +132,208 @@ CD16s <- addMonocleTrajectory(CD16s, useGroups = c('Early Infection', 'Late Infe
                                  monocleCDS = MonocleTraj,
                                   groupBy = 'InfectionStages')
                    
-CD16s <- addTrajectory(CD16s, name = 'StageTrajectory', 
-                      trajectory = c('Early Infection', 'Late Infection', 
-                                                     'Recovery Phase', 'Uninfected'),
-                           groupBy = 'InfectionStages',
-                                 reducedDims = 'TimeLSI')   
-                   
-CD16s <- addTrajectory(CD16s, name = 'KTrajectory', 
-                      trajectory = c('1','3','2'),
-                           groupBy = 'kClusters',
-                                 reducedDims = 'TimeLSI')                   
-                   
-                   
-CD16s <- addImputeWeights(CD16s)    
-                   
+                  
 saveArchRProject(CD16s)
                    
 trajCells <- getCellColData(CD16s) %>% as.data.frame() %>% mutate(Cells = rownames(.)) %>%
                    dplyr::select(Cells, Trajectory, InfectionStages) %>% arrange(Trajectory)
 ggplot(trajCells, aes(x = Trajectory, y =1, fill = InfectionStages)) + geom_tile()
                    
-trajGS <- lapply(c("SlingShot.Curve1", "Trajectory","StageTrajectory","KTrajectory"), function(x) {
+trajGS <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory', useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
     
-            getTrajectory(ArchRProj = CD16s, name = x, useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
-    
-    })
-trajDev <- lapply(c("SlingShot.Curve1", "Trajectory","StageTrajectory","KTrajectory"), function(x) {
-    
-            getTrajectory(ArchRProj = CD16s, name = x, useMatrix = "CD16LongCISBPMatrix", log2Norm = FALSE)
-    
-    })
+trajDev <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory',
+                         useMatrix = "CD16LongCISBPMatrix", log2Norm = FALSE)
     
     
 
-pdf('CD16s_Trajectories.pdf')
-plotTrajectory(CD16s, name = "SlingShot.Curve1", trajectory = "SlingShot.Curve1", 
-                embedding = 'Time_UMAP')[[1]]
-trajectoryHeatmap(trajGS[[1]],  pal = paletteContinuous(set = "horizonExtra"))
-trajectoryHeatmap(trajDev[[1]],  pal = paletteContinuous(set = "horizonExtra"))
+pdf('CD16s_Fig5_Trajectories.pdf')
+
 plotTrajectory(CD16s, name = "Trajectory", trajectory = "Trajectory", 
                 embedding = 'Time_UMAP')[[1]]
-trajectoryHeatmap(trajGS[[2]],  pal = paletteContinuous(set = "horizonExtra"))
-trajectoryHeatmap(trajDev[[2]],  pal = paletteContinuous(set = "horizonExtra"))
-plotTrajectory(CD16s, name = "StageTrajectory", trajectory = "StageTrajectory", 
-                embedding = 'Time_UMAP')[[1]]
-trajectoryHeatmap(trajGS[[3]],  pal = paletteContinuous(set = "horizonExtra"))
-trajectoryHeatmap(trajDev[[3]],  pal = paletteContinuous(set = "horizonExtra"))
-plotTrajectory(CD16s, name = "KTrajectory", trajectory = "KTrajectory", 
-                embedding = 'Time_UMAP')[[1]]
-trajectoryHeatmap(trajGS[[4]],  pal = paletteContinuous(set = "horizonExtra"))
-trajectoryHeatmap(trajDev[[4]],  pal = paletteContinuous(set = "horizonExtra"))
+trajectoryHeatmap(trajGS,  pal = paletteContinuous(set = "horizonExtra"))
+trajectoryHeatmap(trajDev,  pal = paletteContinuous(set = "horizonExtra"))
+
 dev.off()
             
-pdf('CD16s_Trajectories_Monocle.pdf')
-plotTrajectory(CD16s, name = "Trajectory", trajectory = "Trajectory", 
-                embedding = 'Time_UMAP')[[1]]
-trajectoryHeatmap(trajGS[[2]],  pal = paletteContinuous(set = "horizonExtra"))
-trajectoryHeatmap(trajDev[[2]],  pal = paletteContinuous(set = "horizonExtra"))
-dev.off()
-                   
-                   
-### Correlate genescore to motifs
-                   
-#corMat <- correlateTrajectories(trajGS[[2]],trajDev[[2]], fix1 = 'start', fix2 = 'start', log2Norm2 = FALSE)
-#Only correlates between named-matched Genescores and TFs                 
-                   
-GenScore <- assays(trajGS[[2]])$smoothMat
-Dev <- assays(trajDev[[2]])$smoothMat[grepl("z:",rownames(assays(trajDev[[2]])$smoothMat)),] 
-
-pdf('StandardDeviation_Motifs&Genescores.pdf')
-hist(apply(GenScore, 1, sd), breaks = 1000)
-hist(apply(Dev, 1, sd), breaks = 1000)
-dev.off()
-
-GenScoreF <- GenScore[apply(GenScore, 1, sd) > 0.025, ]
-DevF <- Dev[apply(Dev, 1, sd) > 50, ]
-                
-                   
-library(CCA)                   
-### Let's clean up each matrix
-                   
-### calculate rank of matrix 
-qr(GenScore)$rank
-qr(Dev)$rank                   
-### return only full rank columns
-GenScoreF <- robustbase::fullRank(GenScoreF) 
-DevF <- robustbase::fullRank(DevF)
-                   
-model2 <- CCA::rcc(t(GenScoreF), t(DevF), lambda1 = 0.1, lambda2 = 0.1)
-model2$xcoef
-CCA::plt.cc(model2, var.label = TRUE)
-dev.off()
-                   
-plt.cc(model2, var.label = FALSE)
-plot(x = model2$xcoef[,1], y = model2$ycoef[,1])
-
-model2 <- readRDS('CCA_Object.RDS')
-                   
-chosenCor <- model2$cor > .90
-
-head(model2$corr.X.xscores)
-head(model2$scores$corr.Y.xscores)
-##### Let's pull out all the GeneScores that correlate to the Comp1 > 0.9
-##### Repeat for Motif Deviations - Correlations > 0.9
-
-
-findCorrGroup <- function(CCA_model, ComponentNumber, threshold, DevMat,GenMat, plot = FALSE, numCores = 1){
-
-    Comp1Genes <- names(which(abs(CCA_model$scores$corr.X.xscores[,ComponentNumber]) > 0.75))
-    Comp1Dev <- names(which(abs(CCA_model$scores$corr.Y.yscores[,ComponentNumber]) > 0.75))
-
-    correlationList <- mclapply(Comp1Genes, function(y){
-
-           tmp <- lapply(Comp1Dev, function(x){
-        
-                cor(DevMat[which(rownames(DevMat) %in% x),], 
-                     GenMat[which(rownames(GenMat) %in% y),], method = 'spearman')
-           })
-           
-           names(tmp) <- Comp1Dev
-           
-           unlist(tmp)
-           
-    }, mc.cores = numCores) 
-    
-    names(correlationList) <- Comp1Genes
-
-    corrTable <- do.call('cbind', correlationList) 
-
-    Comp1Corr <- corrTable %>% 
-          as.data.frame() %>%
-          rownames_to_column("Dev") %>%
-          pivot_longer(-c(Dev), names_to = "Genes", values_to = "cor")
-          
-    if(plot){
-    
-       p1 <-  ggplot(Comp1Corr, aes(x=samples, y=Dev, fill=cor)) + 
-                  geom_raster() +
-                  scale_fill_viridis_c()
-      
-      return(p1)
-    
-    }else{
-    
-        return(Comp1Corr)
-        
-    }
-          
-}
-
-allComp <- lapply(1:2, function(x){
-                print(x) 
-                findCorrGroup(model2, x, 0.9, DevF, GenScoreF, numCores = 40)
-                
-               })
-
-
-allComp2 <- lapply(allComp, function(x){
-
-                x %>% mutate(Motifs = gsub('z:','', Dev), GeneScore = gsub('.*:','', Genes)) %>%
-                  mutate(Motifs = gsub('_.*','',Motifs))
-
-})
-
-plotList <- lapply(allComp2, function(x){
-
-                  ggplot(x, aes(x=Genes, y=Dev, fill=cor)) + 
-                  geom_raster() +
-                  scale_fill_viridis_c()
                   
-             })
+### Find Monocle trajectories and run Over-representation analysis
+GS_Traj <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory', useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
+ChromVar_Traj <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory', useMatrix = "CD16LongCISBPMatrix", log2Norm = FALSE) 
 
-plotList2 <- lapply(allComp2, function(x){
+allGenes <- getGenes(CD16s)
+allMotifs <- getPositions(CD16s, 'CD16LongCISBPMotif')
+enrichDataBaseList <- WebGestaltR::listGeneSet()
+                   
+GeneEnrichment <- lapply(enrichDataBaseList$name[c(2,7,8,9,10)], function(x){
+    
+        simplifiedORA(x, unique(rowData(GS_Traj)$name), unique(allGenes$symbol))
+    
+    })
+                   
+specMotifList <- unique(rowData(ChromVar_Traj)$name)
+                   
+TF_Enrichment <- lapply(enrichDataBaseList$name[c(2,7,8,9,10)], function(x){
+    
+        simplifiedORA(x, gsub("_.*", "", specMotifList), 
+                      gsub("_.*", "", names(allMotifs)))
+    
+    })                   
 
-                 x %>% pivot_wider(., id_cols = 'Motifs', 
-                         names_from = 'GeneScore', values_from = 'cor') %>% 
-                         as.data.table() %>% as.matrix(., rownames = 'Motifs' ) %>%
-                         pheatmap::pheatmap()
-             })
+pdf('CD16_Fig5_Panther_Database.pdf')
 
 
-pdf('CCA_Components.pdf')
+ggplot(GeneEnrichment[[3]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Panther Pathway Enrichment on Genescore Trajectory')
 
-plotList
-ggplot()
-plotList2[[1]]
-ggplot()
-plotList2[[2]]
-  
+ggplot(TF_Enrichment[[3]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Panther Pathway Enrichment on ChromVar Trajectory')
+
+ggplot(GeneEnrichment[[4]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Reactome Pathway Enrichment on GeneScore Trajectory')
+
+                   
+dev.off()
+
+
+############### Now do the same as above, but with the standard UMAP
+library(monocle3)
+MonocleTraj2 <- getMonocleTrajectories(
+                  CD16s,
+                  name = "Trajectory2",
+                useGroups = c('Early Infection', 'Late Infection', 
+                                                       'Recovery Phase', 'Uninfected'),
+                                  principalGroup = 'Early Infection', 
+                                  groupBy = 'InfectionStages',
+                                  embedding = "normUMAP")
+                    
+CD16s <- addMonocleTrajectory(CD16s, useGroups = c('Early Infection', 'Late Infection', 
+                                                       'Recovery Phase', 'Uninfected'),
+                                 name = 'Trajectory2',
+                                 monocleCDS = MonocleTraj2,
+                                  groupBy = 'InfectionStages', force = TRUE)
+                   
+                  
+saveArchRProject(CD16s)
+         
+trajectoryAnnotation = data.frame(DaysPSO = CD16s$days_since_symptoms, Trajectory = CD16s$Trajectory2) %>%
+                   dplyr::filter(!is.na(DaysPSO)) %>% dplyr::mutate(y = 1)
+                   
+pdf('CD16s_Fig5_DaysPSO_Over_Trajectory.pdf')
+ggplot(trajectoryAnnotation, aes(x = Trajectory, y = y, fill = DaysPSO)) + geom_tile() + theme_minimal()
+dev.off()
+                   
+       
+### Pull out trajectories for GeneScores and Motif Deviations
+                   
+trajGS2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2', 
+                         useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
+
+trajDev2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2',
+                         useMatrix = "CD16LongCISBPMatrix", log2Norm = FALSE)
+    
+
+pdf('CD16s_Fig5_Default_Trajectories.pdf')
+
+plotTrajectory(CD16s, name = "Trajectory2", trajectory = "Trajectory2", 
+                embedding = "normUMAP")[[1]]
+plotTrajectoryHeatmap(trajGS2,  pal = paletteContinuous(set = "horizonExtra"))
+plotTrajectoryHeatmap(trajDev2,  pal = paletteContinuous(set = "horizonExtra"))
+
+dev.off()
+
+### For default UMAP trajectory,  Over-representation analysis 
+allGenes <- getGenes(CD16s)
+allMotifs <- getPositions(CD16s, 'CD16LongCISBPMotif')
+enrichDataBaseList <- WebGestaltR::listGeneSet()
+                   
+GeneEnrichment <- lapply(enrichDataBaseList$name[c(2,7,8,9,10)], function(x){
+    
+        simplifiedORA(x, unique(rowData(trajGS2)$name), unique(allGenes$symbol))
+    
+    })
+                   
+specMotifList <- unique(rowData(trajDev2)$name)
+                   
+TF_Enrichment <- lapply(enrichDataBaseList$name[c(2,7,8,9,10)], function(x){
+    
+        simplifiedORA(x, gsub("_.*", "", specMotifList), 
+                      gsub("_.*", "", names(allMotifs)))
+    
+    })                   
+
+simplifiedORA(enrichDataBaseList$name[8], gsub("_.*", "", specMotifList), 
+                      gsub("_.*", "", names(allMotifs)))
+                   
+pdf('CD16_Fig5_Panther_Database_DefaultUMAP.pdf')
+
+
+ggplot(GeneEnrichment[[3]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Panther Pathway Enrichment on Genescore Trajectory')
+
+ggplot(TF_Enrichment[[3]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Panther Pathway Enrichment on ChromVar Trajectory')
+
+ggplot(GeneEnrichment[[4]], aes(x = description,
+                           y = FDR, fill = FDR)) +
+            geom_col() +  coord_flip() + theme_bw() + 
+                        xlab('Term Description') + 
+                        ylab('FDR') + 
+            theme(legend.position = c(0.8, 0.8))+ 
+            ggtitle('Reactome Pathway Enrichment on GeneScore Trajectory')
+
+                   
 dev.off()
 
 
 
-write.csv(allComp2[[1]], 'CCA_Component1_Correlation.csv')
-write.csv(allComp2[[2]], 'CCA_Component2_Correlation.csv')
 
-enrichDataBaseList <- WebGestaltR::listGeneSet()
-allGenes <- gsub(".*:",'',rownames(GenScore))
-                             
-Comp1ORA <- lapply(enrichDataBaseList$name[c(1:9,58:65)], function(x)
-                      simplifiedORA(x,
-                               allComp2[[1]]$GeneScore, allGenes))
-                               
-Comp2ORA <- lapply(enrichDataBaseList$name[c(1:9,58:65)], function(x)
-                      simplifiedORA(x,
-                               allComp2[[2]]$GeneScore, allGenes))
-any(lapply(Comp2ORA, length) > 0)
-Comp1ORA[[(unlist(lapply(Comp1ORA, length)) > 0]]
+ 
 
-
-
-
-
-
-
-
-## Just females to match modeling?
-CD16s <- DietArchRProject(CD16s, keep = c('TileMatrix', "CD16LongCISBPMatrix", "GeneIntegrationMatrix", "GeneScoreMatrix",
-                                          "PeakMatrix"), verbose = TRUE) 
-CD16f <- subsetArchRProject(CD16s, cells = getCellNames(CD16s)[
-                CD16s$predictedGroup_Co2 == 'CD16 Mono' & CD16s$COVID_status == 'Positive'],
-                            outputDirectory = 'CD16Infected', dropCells = TRUE, force = TRUE)
-saveArchRProject(CD16f)
-    
-CD16f <- loadArchRProject('CD16Infected')
-
-#CD16f <- addPeakSet(CD16f, TimeRegs, force = TRUE)
-#CD16f <- addPeakMatrix(CD16f, force = TRUE)
-addArchRThreads(50)
-CD16f <- addIterativeLSI(CD16f,  useMatrix = "PeakMatrix", name = "TimeLSI",   iterations = 5, force = TRUE)
-CD16f <- addUMAP(CD16f,  reducedDims ="TimeLSI",
-  name = "Time_UMAP", force = TRUE)
-saveArchRProject(CD16f)
-                   
 
 ##### Let's try a different type of density plot
-EmbedDF <- getEmbedding(CD16s, 'TimeU_UMAP')
+
    
 allDen <- plotDensity(ArchRProj= CD16s, embeddingName= "Time_UMAP", 
                        plotLegend = FALSE, 
                       axisTextSize = 10, 
                       identity = "InfectionStages", returnObj = TRUE)
-    
-allDenPASC <- plotDensity(ArchRProj= CD16s, embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "PASC_InfectionStages", returnObj = TRUE)
-                   
-allDen2 <- plotDensity(ArchRProj= CD16f, embeddingName= "Time_UMAP", 
+           
+NormalDen <- plotDensity(ArchRProj= CD16s, embeddingName= "normUMAP", 
                        plotLegend = FALSE, 
                       axisTextSize = 10, 
                       identity = "InfectionStages", returnObj = TRUE)
-    
-allDenPASC2 <- plotDensity(ArchRProj= CD16f, embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "PASC_InfectionStages", returnObj = TRUE)
+
 
 library('ggpubr')
     
 plotAll <- ggpubr::ggarrange(plotlist = allDen, nrow = 2, ncol = 2)
+plotNormAll <- ggpubr::ggarrange(plotlist = NormalDen, nrow = 2, ncol = 2)
 
-plotAllP <- ggpubr::ggarrange(plotlist = allDenPASC , nrow = 4, ncol = 2)
-plotAll2 <- ggpubr::ggarrange(plotlist = allDen2, nrow = 2, ncol = 2)
-
-plotAllP2 <- ggpubr::ggarrange(plotlist = allDenPASC2 , nrow = 4, ncol = 2)
 
 
 
@@ -361,272 +341,1232 @@ plotAllP2 <- ggpubr::ggarrange(plotlist = allDenPASC2 , nrow = 4, ncol = 2)
 pdf('CD16_LongitudinalUMAP_Density.pdf')
 annotate_figure(plotAll, top = text_grob("CD16s in All Donors", 
               face = "bold", size = 14))
-    
+           
+annotate_figure(plotNormAll, top = text_grob("CD16s in All Donors (Unbiased UMAP)", 
+              face = "bold", size = 14))    
 
-annotate_figure(plotAllP, top = text_grob("CD16s in All Donors", 
-              face = "bold", size = 14))
-    
-annotate_figure(plotAll2, top = text_grob("CD16s in All Donors", 
-              face = "bold", size = 14))
-    
-
-annotate_figure(plotAllP2, top = text_grob("CD16s in All Donors", 
-              face = "bold", size = 14))
-    
 dev.off()
     
-DonorDensity <- lapply(unique(CD16s$PTID), function(x){
-    
-        plotDensity(ArchRProj= CD16s[CD16s$PTID == x], embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "InfectionStages", returnObj = TRUE)
-    
-    })
-    
-DonorDensity2 <- lapply(seq_along(unique(CD16s$PTID)), function(x){
-                    ggpubr::ggarrange(plotlist = DonorDensity[[x]], nrow = 2, ncol = 2)
-                })
-        
-pascS <- getCellColData(CD16s) %>% as.data.frame() %>% dplyr::select(PTID, PASC_status) %>% distinct() 
-   
 
-                   
-pdf('CD16_LongitudinalUMAP_Density_Donor.pdf')
-                
-                   
-for(i in 1:length(DonorDensity2)){
-    
-    p1 <- annotate_figure(DonorDensity2[[i]], top = text_grob(paste("Donor ",unique(CD16s$PTID)[i], ": ",
-                                                                    pascS$PASC_status[pascS$PTID == unique(CD16s$PTID)[i]],sep=""), 
-              face = "bold", size = 14))
-    print(p1)
-    
-}
-                          
-dev.off()
-                   
-DonorDensity3 <- lapply(unique(CD16s$InfectionStages), function(x){
-    
-        plotDensity(ArchRProj= CD16s[CD16s$InfectionStages == x], embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "PTID", returnObj = TRUE)
-    
-    })
-                   
+################################################################################
 
-pdf('CD16s_LongitudinalUMAP_By_Stage.pdf')
-                   
-for(i in 1:length(DonorDensity3)){
-    
-    p1 <- annotate_figure(ggarrange(plotlist = DonorDensity3[[i]]), 
-                          top = text_grob(unique(CD16s$InfectionStages)[i], 
-              face = "bold", size = 14))
-    print(p1)
-    
-}                          
-dev.off() 
-                   
-############## plot by Days PSO per donor
-                   
-tmp <- data.frame(COVID = CD16s$COVID_status, PTID = CD16s$PTID, DaysPSO = CD16s$DaysPSO) %>% distinct()
-                
-COVIDPos <- unique(CD16s$PTID[CD16s$COVID_status == 'Positive'])
-DonorDayDensity <- lapply(COVIDPos, function(x){
-    
-        tmp <- plotDensity(ArchRProj= CD16s[CD16s$PTID == x], embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, plotAxis= FALSE, plotTitle = TRUE, 
-                           titleAdjust = c(hjust = 0, vjust= 0), 
-                      axisTextSize = 10, addText = 'Day ',
-                      identity = "DaysPSO", returnObj = TRUE)
-        nEmpty = 5-length(tmp)
-         print(nEmpty)
-        if(nEmpty  > 0){
-         for(i in 1:nEmpty){
+
+#### Now for pseudobulk analysis
+
+#################################################################################
+
+STM <- readRDS('scMACS_SampleTileMatrix.RDS')
+
+sampleMat <- assays(STM)[['CD16 Mono']]
+compMat <- cbind(as.data.frame(StringsToGRanges(results$SampleTileMatrix$tileID)), sampleMat)
+name(compMat) <- 'counts'
+
+## getMotifs
+
+data(human_pwms_v2)
+STM <- addMotifSet(STM, pwms = human_pwms_v2, motifSetName = 'Cisbp', w = 7)
+saveRDS(STM,'scMACS_SampleTileMatrix.RDS')
+
+MonoDCE <- loadArchRProject('MonoDC_Edits')
+metadf <- getCellColData(MonoDCE) %>% as.data.frame()
+subMat <- dplyr::select(metadf, c(Sample, PTID, DaysPSO, InfectionStages, PASC, Age, AgeGroups)) %>% distinct()
+#subMat$Sample <- gsub("-",".", subMat$Sample)
+subMat <- subMat %>% group_by(PTID) %>%
+            mutate(PASC = case_when(any(grepl('Non',PASC)) ~ 'Noninflamed PASC', 
+                                    any(grepl('Infl',PASC)) ~ 'Inflamed PASC',
+                                      TRUE ~ 'Recovered')) %>%
+            ungroup() %>%
+            mutate(PASC_Cat = ifelse(grepl("PASC",PASC), 
+                                 'PASC', 'Recovered')) %>% 
+            ungroup() 
+
+## Pull in Variance decomposition results
+varPeaks <- read.csv('variance_decomposition_peaks.csv') 
+subVarPeaks <- varPeaks[,c('PTID','Time','Age','Sex','Residual')]
+maxComp <- colnames(subVarPeaks)[apply(subVarPeaks, 1, which.max)]
+varPeaks$MaxVar <- maxComp
+Time_Regs <- filter(varPeaks, MaxVar == 'Time')
+TimeRegs <- Time_Regs$Gene %>% sub("\\.",":",.) %>%
+            sub("\\.","-", .) %>% MOCHA::StringsToGRanges()
+
+samplePeakMat <- sampleMat
+colnames(samplePeakMat) <- gsub("__.*","", colnames(samplePeakMat)
+AllPeaks <- MOCHA::StringsToGRanges(samplePeakMat$tileID)
+                        
+samplePeakMat[is.na(samplePeakMat)] <- 0
+all_pca <- prcomp(t(samplePeakMat[rownames(samplePeakMat) %in% GRangesToString(TimeRegs),])) 
+pca_plot <- all_pca$x  %>% as.data.frame() %>% dplyr::mutate(Sample = rownames(.)) %>%
+                inner_join(subMat, by = 'Sample') %>% arrange(DaysPSO)
+                                
+pdf('Psuedobulk_PCA_Longitudinal_CD16s.pdf')
+         
+ggplot(pca_plot) + 
+     geom_point(aes(x = PC1, y = PC2, shape = InfectionStages),
+               size = 2.5) +
+     theme_bw()
+                                
+ggplot(pca_plot) + 
+    geom_point(aes(x = PC2, y = PC3, shape = InfectionStages),
+               size = 2.5) +
+     theme_bw()
+                                
+ggplot(pca_plot) + 
+     geom_point(aes(x = PC3, y = PC4, shape = InfectionStages),
+               size = 2.5) +
+     theme_bw()  
             
-                tmp <- append(tmp, list(ggplot()))
-            
-         }F
-        }
-    
-        tmp
-    
-    })
-                  
-library(ggpubr)          
-library(patchwork)   
-pdf('CD16s_LongitudinalUMAP_By_DaysPSO.pdf' )
-for(i in 1:length(DonorDayDensity)){
-    
-    p1 <- annotate_figure(ggarrange(plotlist = DonorDayDensity[[i]]), 
-                          top = text_grob(COVIDPos [i], face = "bold", size = 14))
-    print(p1)
-    
-}    
+ggplot(pca_plot) + 
+     geom_point(aes(x = PC3, y = PC4, shape = InfectionStages),
+               size = 2.5) +
+     theme_bw()  
+
 dev.off()
-                   
+                                
+TimeMatv2 <- samplePeakMat[samplePeakMat$tileID %in% GRangesToString(TimeRegs), -'tileID'] 
+colnames(TimeMatv2) <- gsub("__.*","",colnames(TimeMatv2))
+TimeMatv2 <- TimeMatv2[,colnames(TimeMatv2) %in% 
+                     subMat$Sample[subMat$InfectionStages != "Uninfected"], with = FALSE]
+set.seed(1)
+TimeUMAPv2 <- as.data.frame(uwot::umap(t(TimeMatv2)))
+colnames(TimeUMAPv2) = c('UMAP1', 'UMAP2')
+TimeUMAPv2$Sample = rownames(TimeUMAPv2)
+TimeUMAP2v2 <- inner_join(TimeUMAPv2, subMat, by = 'Sample') %>% arrange(DaysPSO)
+TimeUMAP2v2$KMeans <- kmeans(TimeUMAP2v2[,c('UMAP1', 'UMAP2')], centers =3, nstart = 100)$cluster
+TimeUMAP2v2 <- TimeUMAP2v2 %>% group_by(PTID) %>%
+                    dplyr::mutate(Last = ifelse(DaysPSO == max(DaysPSO),
+                                                'Last', 'NotLast')) %>%
+                    dplyr::mutate(TrajectoryGroup = 
+                                  ifelse(any(KMeans == 1 & Last == 'Last'),
+                                         'Group 1', 'Group 2'))
+                                
+write.csv(TimeUMAP2v2, 'Pseudobulk_UMAP_Longitudinal_CD16s.csv')
+                              
+TimeUMAP2v2 <- read.csv('Pseudobulk_UMAP_Longitudinal_CD16s.csv')  %>% 
+                                group_by(PTID) %>% arrange(PTID, DaysPSO) %>%
+                     dplyr::mutate(Last = ifelse(DaysPSO == min(DaysPSO), 'First', Last))
 
-donorPlots <- function(ArchRProj, embeddingName,
-                         DonorCol = 'PTID', LongitudinalID = 'days_since_onset',
-                         LongitudinalTitleAdd = 'Day', rowNumber = 5){
+allPeakUMAP <- uwot::umap(t(sampleMat)) %>% as.data.frame() %>% mutate(Sample = rownames(.)) %>%
+                    dplyr::rename(UMAP1 = V1, UMAP2 = V2) %>%
+                    inner_join(subMat, by = 'Sample') %>% arrange(DaysPSO)
+                                
+pdf('Pseudobulk_TimeUMAP_v3.pdf')
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, color = PASC_status, shape = InfectionStages),
+               size = 2) + theme_bw()
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, color = PASC, shape = InfectionStages),
+               size = 2) + theme_bw()
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, color = DaysPSO, shape = InfectionStages),
+               size = 2) + theme_bw() +
+            scale_colour_gradient(limits = c(0,30))
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = PASC),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color =  PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
 
- metadata <- as.data.frame(getCellColData(ArchRProj)) %>% dplyr::mutate(Cells = rownames(.)) 
-  
- embed_df <- getEmbedding(ArchRProj, embedding = embeddingName) %>% as.data.frame() %>% 
-    dplyr::mutate(Cells = rownames(.)) %>%
-    dplyr::rename(UMAP_1 = grep("_1", colnames(.)), UMAP_2 = grep("_2", colnames(.))) %>%
-                dplyr::inner_join(metadata, by = "Cells") 
-    
- df_list <- embed_df %>%
-         dplyr::group_by(!!sym(DonorCol)) %>% 
-        dplyr::mutate(First = ifelse(visit == 1,
-                                     TRUE, FALSE)) %>% 
-        dplyr::mutate(First = ifelse(visit == 2 & !!sym(DonorCol) == 32245,
-                                     TRUE, First)) %>%
-                                     
-        dplyr::ungroup() %>%
-         dplyr::group_split(!!sym(DonorCol), .keep = TRUE) 
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ AgeGroups)
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ PTID)
 
-    
- endList <- lapply(df_list, function(x){
-    
-    tmp <- x %>% dplyr::arrange(!!sym(LongitudinalID)) %>% dplyr::group_split(!!sym(LongitudinalID), .keep = TRUE) %>%
-             purrr::map( ~ ggplot(., aes(UMAP_1, UMAP_2)) + 
-         geom_density_2d_filled(aes(alpha = (..level..))) +  theme_void() + 
-        scale_alpha_discrete(range = c(0, 1)) +
-        scale_fill_viridis_d(na.value = "transparent", aes(fill = ..density..*10^4)) + 
-        theme(legend.position = 'none',  
-          plot.margin = margin(t = 0.5, r = 0.5, b =0.5, l = 0.5, unit = "pt"),
-         panel.spacing=unit(-1.5, "lines")) +
-        ggtitle(ifelse(any(.$First), 
-                       paste(unique(unlist(.[,DonorCol])), 
-                             LongitudinalTitleAdd, unique(.[,LongitudinalID]), sep =' '),
-                       paste(LongitudinalTitleAdd, unique(unlist(.[,LongitudinalID])), sep = ' '))) 
-        )
-    
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ PTID)
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ TrajectoryGroup)    
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = as.factor(PTID)),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+                                 geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages),
+               size = 2.5) 
+                                
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID
+                  ),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5) 
+                                
+                                
+ggplot(TimeUMAP2v2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID
+                  color = batch_id),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5) 
+
+dev.off()
+      
+                                
+#### All Peaks UMAP
+                                
+STM <- readRDS('scMACS_SampleTileMatrix.RDS')
+
+STM2 <- subsetMOCHAObject(STM, subsetBy = 'COVID_status', groupList = 'Positive')
+sampleMat <- assays(STM2)[['CD16 Mono']]
+sampleMat[is.na(sampleMat)] = 0
+
+set.seed(2)
+                                
+umapAll <- as.data.frame(uwot::umap(2^t(sampleMat)-1))
+colnames(umapAll ) = c('UMAP1', 'UMAP2')
+umapAll$Sample <- rownames(umapAll)
+
+umapAll<- inner_join(umapAll, as.data.frame(colData(STM2)), by = 'Sample') %>% arrange(DaysPSO)
+
+umapAll <- umapAll%>% group_by(PTID) %>%
+                    dplyr::mutate(Last = case_when(DaysPSO == max(DaysPSO) ~ 'Last',
+  						    DaysPSO == min(DaysPSO) ~ 'First',
+                                 TRUE ~ 'Other'))
+umapAll$KMeans <- kmeans(umapAll [,c('UMAP1', 'UMAP2')], centers =3, nstart = 100)$cluster
+                                
+umapAll2 <- as.data.frame(uwot::umap(t(sampleMat)))
+colnames(umapAll2 ) = c('UMAP1', 'UMAP2')
+umapAll2$Sample <- rownames(umapAll2)
+                                
+
+
+umapAll2<- inner_join(umapAll2, as.data.frame(colData(STM2)), by = 'Sample') %>% arrange(DaysPSO)
+
+umapAll2 <- umapAll2 %>% group_by(PTID) %>%
+                    dplyr::mutate(Last = case_when(DaysPSO == max(DaysPSO) ~ 'Last',
+  						    DaysPSO == min(DaysPSO) ~ 'First',
+                                 TRUE ~ 'Other'))
+umapAll2$KMeans <- kmeans(umapAll2 [,c('UMAP1', 'UMAP2')], centers =3, nstart = 100)$cluster
+
+                                
+pdf('Pseudobulk_UMAP2.pdf')
+
+ggplot(umapAll, aes(x = UMAP1, y = UMAP2)) + geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = Last),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() + ggtitle('Raw data, all tiles')
+
+ggplot(umapAll) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5)  + ggtitle('Raw data, all tiles')
+                                
+ggplot(umapAll) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color =Last),
+               size = 2.5)  + ggtitle('Raw data, all tiles')
+
+ggplot(umapAll2, aes(x = UMAP1, y = UMAP2)) + geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = Last),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() + ggtitle('Log2 data, all tiles')
+
+ggplot(umapAll2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5) + ggtitle('Log2 data, all tiles')
+                                
+ggplot(umapAll2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color =Last),
+               size = 2.5)  + ggtitle('Log2 data, all tiles')
+                                
+dev.off()
+
+### All peaks outside of the Time-related peakset
      
-    if(length(tmp) < rowNumber){
-        nEmpty = rowNumber - length(tmp)
-        p1 <- ggplot() + theme_void()
-         tmp <- append(tmp, as.list(rep(list(p1),nEmpty)))
-    }
-    tmp
-    
-    }) 
-    
-    unlist(endList, recursive = FALSE)
+varPeaks <- read.csv('variance_decomposition_peaks.csv')                        
+maxComp <- colnames(subVarPeaks)[apply(subVarPeaks, 1, which.max)]
+varPeaks$MaxVar <- maxComp
+Time_Regs <- filter(varPeaks, MaxVar == 'Time')
+TimeRegs <- Time_Regs$Gene %>% sub("\\.",":",.) %>%
+            sub("\\.","-", .) %>% MOCHA::StringsToGRanges()
 
-}
+sampleMat2 <- sampleMat[!rownames(sampleMat) %in% MOCHA::GRangesToString(TimeRegs),]
 
-                   
-finalList <- donorPlots(ArchRProj= CD16s[CD16s$COVID_status == 'Positive'], 
-                        embeddingName= 'Time_UMAP',
-                         DonorCol = 'PTID', LongitudinalID = 'DaysPSO',
-                         LongitudinalTitleAdd = 'Day', rowNumber = 5)
+set.seed(1)
+                                
+umapNonTime <- as.data.frame(uwot::umap(t(sampleMat2)))
+colnames(umapNonTime ) = c('UMAP1', 'UMAP2')
+umapNonTime$Sample <- rownames(umapNonTime)
 
-pdf('CD16s_LongitudinalUMAP_By_DaysPSO_All.pdf', width = 7, height = 21 )
-   
-  ggpubr::ggarrange(plotlist = finalList, ncol = 5, nrow = 18)    
-    
-dev.off()
+umapNonTime<- inner_join(umapNonTime, as.data.frame(colData(STM2)), by = 'Sample') %>% arrange(DaysPSO)
 
-                   
-pdf('CD16s_LongitudinalUMAP_By_DaysPSO_All.pdf', width = 7, height = 21 )                  
-    patchwork::wrap_plots(tmp1, 
-                        nrow = 18, ncol = 5)
-dev.off()    
-                   
+umapNonTime <- umapNonTime%>% group_by(PTID) %>%
+                    dplyr::mutate(Last = case_when(DaysPSO == max(DaysPSO) ~ 'Last',
+  						    DaysPSO == min(DaysPSO) ~ 'First',
+                                 TRUE ~ 'Other'))
+umapNonTime$KMeans <- kmeans(umapNonTime [,c('UMAP1', 'UMAP2')], centers =3, nstart = 100)$cluster
+                                
+pdf('Pseudobulk_NonTimeUMAP.pdf')
 
-                     
-CD16s2 <- saveArchRProject(CD16s, outputDirectory = 'CD16s_FullPeakset')
-addArchRThreads(50)
-CD16s2 <- addPeakSet(CD16s2, StringsToGRanges(results$SampleTileMatrix$tileID), force = TRUE)
-CD16s2 <- addPeakMatrix(CD16s2, force = TRUE)
-CD16s2 <- addIterativeLSI(CD16s2,  useMatrix = "PeakMatrix", name = "LongLSI", force = TRUE,
-                        varFeatures = 237407, iterations = 1)
-CD16s2 <- addUMAP(CD16s2,  reducedDims ="LongLSI",
-  name = "Long_UMAP", force = TRUE)
-saveArchRProject(CD16s2)
-                     
-LongDen <- plotDensity(ArchRProj= CD16s2, embeddingName= "Long_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "InfectionStages", returnObj = TRUE)                    
-plotLong <- ggpubr::ggarrange(plotlist = LongDen, nrow = 2, ncol = 2)                
-                     
-pdf('CD16_LongPeakSet_UMAP.pdf')
-annotate_figure(plotLong, top = text_grob("CD16s in All Donors & All Peaks", 
-              face = "bold", size = 14))
-dev.off()
+ggplot(umapNonTime, aes(x = UMAP1, y = UMAP2)) + geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = Last),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+
+ggplot(umapNonTime) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5) 
+                                
+                                
+dev.off()                                
+                                
     
 ################################################################
 
-##Subset donors by end-point
+##Identify groups of donors based on Normal and Abnormal Response
 
-Group1 = c(31207, 31945, 32054, 32140, 32245,32255, 32416, 42409, 32131)  #Low
-Group2 = c(31874, 31924, 32038, 32124, 32196, 32209, 32251, 32415) #High
-
-tmp2 <- c(31924, 32196, 32415, 32251, 32209, 32038, 32124, 31874)
-tmp1 <- c(32416,  42409,  32255,  31207,  32245,  32209,  32054,  32131,  32140,  31945) 
-
-CD16f1 <- subsetArchRProject(CD16f,
-                cells = getCellNames(CD16f)[CD16f$PTID %in% Group1],
-                            outputDirectory = 'CD16s_Group1', dropCells = TRUE)
-saveArchRProject(CD16f1)
-
-CD16f2 <- subsetArchRProject(CD16f,
-                cells = getCellNames(CD16f)[CD16f$PTID %in% Group2],
-                            outputDirectory = 'CD16s_Group2', dropCells = TRUE)
-saveArchRProject(CD16f2)
+Abnormal = c(32220, 32038, 31874, 32124, 31924, 32251, 32196, 32415)
+Normal = c(32209, 31207, 32140, 32245, 32054, 32255, 32131, 31945, 32416, 42409)
 
 
-MonocleTrajf1 <- getMonocleTrajectories(
-                  CD16f1,
-                  name = "Trajectory",
-                useGroups = c('Early Infection', 'Late Infection', 
-                                                       'Recovery Phase'),
-                                  principalGroup = 'Early Infection', 
-                                  groupBy = 'InfectionStages',
-                                  embedding = 'Time_UMAP')
-                                  
-MonocleTrajf2 <- getMonocleTrajectories(
-                  CD16f2,
-                  name = "Trajectory",
-                useGroups = c('Early Infection', 'Late Infection', 
-                                                       'Recovery Phase'),
-                                  principalGroup = 'Early Infection', 
-                                  groupBy = 'InfectionStages',
-                                  embedding = 'Time_UMAP')
+STM <- readRDS('scMACS_SampleTileMatrix.RDS')
 
-CD16f1 <- addMonocleTrajectory(CD16f1, useGroups = c('Early Infection', 'Late Infection', 
-                                                       'Recovery Phase'),
-                                 monocleCDS = MonocleTrajf1,
-                                  groupBy = 'InfectionStages', force = TRUE)
-CD16f2 <- addMonocleTrajectory(CD16f2, useGroups = c('Early Infection', 'Late Infection', 
-                                                       'Recovery Phase'),
-                                 monocleCDS = MonocleTrajf2,
-                                  groupBy = 'InfectionStages', force = TRUE)
-saveArchRProject(CD16f1)          
-saveArchRProject(CD16f2)
+meta1 <- colData(STM)
+meta1$ResponseType =  dplyr::case_when(meta1$PTID %in% Normal ~ 'Normal',
+                                       meta1$PTID %in% Abnormal ~ 'Abnormal',
+                                      TRUE ~ 'Uninfected')
+firstVisit <- as.data.frame(meta1) %>% dplyr::group_by(PTID) %>%
+    dplyr::arrange(DaysPSO) %>%
+    dplyr::slice_head(n=1) %>% 
+    dplyr::filter(InfectionStages == 'Early Infection')
 
-CD16G1 <- plotDensity(ArchRProj= CD16f1, embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "InfectionStages", returnObj = TRUE)
-CD16G2 <- plotDensity(ArchRProj= CD16f2, embeddingName= "Time_UMAP", 
-                       plotLegend = FALSE, 
-                      axisTextSize = 10, 
-                      identity = "InfectionStages", returnObj = TRUE)
-                                  
-pdf('CD16s_Trajectories_Subset_Monocle.pdf')
-cowplot::plot_grid(plotlist = CD16G1, ncol = 3)
-plotTrajectory(CD16f1, name = "Trajectory", trajectory = "Trajectory", 
-                embedding = 'Time_UMAP')[[1]]
-cowplot::plot_grid(plotlist = CD16G2, ncol = 3)
-plotTrajectory(CD16f2, name = "Trajectory", trajectory = "Trajectory", 
-                embedding = 'Time_UMAP')[[1]]  
+LastVisit <- as.data.frame(meta1) %>% dplyr::group_by(PTID) %>%
+    dplyr::arrange(DaysPSO) %>%
+    dplyr::slice_tail(n=1) %>% 
+    dplyr::filter(InfectionStages == 'Recovery Phase')
+
+meta1$VisitType <- dplyr::case_when(meta1$Sample %in% firstVisit$Sample ~ 'First',
+                       meta1$Sample %in% LastVisit$Sample ~ 'Last',
+                        meta1$InfectionStages == 'Uninfected' ~ 'Only',
+                       TRUE ~ 'Other')
+
+meta1$ResponseType_Visit <- 
+    paste(meta1$ResponseType, meta1$VisitType, sep = '_')
+
+colData(STM) <- meta1
+saveRDS(STM, 'scMACS_SampleTileMatrix.RDS')
+
+compGroups <- list(c('Normal_First', 'Uninfected_Only'),
+                   c('Normal_Last', 'Uninfected_Only'),
+                   c('Abnormal_First', 'Uninfected_Only'),
+                   c('Abnormal_Last', 'Uninfected_Only'))
+names(compGroups) <- c('Normal_First', 'Normal_Last',
+                       'Abnormal_First','Abnormal_Last')
+                                
+timeTiles <- sub("\\.",":",Time_Regs$Gene) %>% sub("\\.", "-", .)
+
+allDATsList <- lapply(compGroups, function(x){
+    
+                     getDifferentialAccessibleTiles(STM[rownames(STM) %in% timeTiles,] ,
+                                            cellPopulation = 'CD16 Mono',
+                                           groupColumn = 'ResponseType_Visit',
+                                           foreground = x[1],
+                                           background = x[2],
+                                           signalThreshold = 0,
+                                           minZeroDiff = 0,
+                                           fdrToDisplay = 0.2,
+                                           outputGRanges = TRUE,
+                                           numCores = 15)
+    
+    })
+#869 DATs - Normal First Visit
+#181 DATs - Normal Last Visit
+#0 DATs - Abnormal First Visit
+#0 DATs - Abnormal Last Visit
+
+hist(allDATsList[[1]]$P_value, breaks = 100)
+hist(allDATsList[[2]]$P_value, breaks = 100)
+hist(allDATsList[[3]]$P_value, breaks = 100)
+hist(allDATsList[[4]]$P_value, breaks = 100)
+
+hist(allDATsList[[1]]$Avg_Intensity_Control, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[1]]$Avg_Intensity_Case, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[2]]$Avg_Intensity_Control, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[2]]$Avg_Intensity_Case, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[3]]$Avg_Intensity_Control, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[3]]$Avg_Intensity_Case, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[4]]$Avg_Intensity_Control, breaks = 100, xlim = c(5,18))
+hist(allDATsList[[4]]$Avg_Intensity_Case, breaks = 100, xlim = c(5,18))
+
+hist(allDATsList[[1]]$Pct0_Control, breaks = 100)
+hist(allDATsList[[1]]$Pct0_Case, breaks = 100)
+hist(allDATsList[[2]]$Pct0_Control, breaks = 100)
+hist(allDATsList[[2]]$Pct0_Case, breaks = 100)
+hist(allDATsList[[3]]$Pct0_Control, breaks = 100)
+hist(allDATsList[[3]]$Pct0_Case, breaks = 100)
+hist(allDATsList[[4]]$Pct0_Control, breaks = 100)
+hist(allDATsList[[4]]$Pct0_Case, breaks = 100)
+
 dev.off()
 
+allEnrichments <- lapply(allDATsList, function(x){
+    
+        foreList <- plyranges::filter(x, FDR <= 0.2)
+        backList <- plyranges::filter(x, FDR > 0.2)
+    
+        MotifEnrichment(foreList, backList,
+                        STM@metadata$Cisbp, numCores = 15)
+    
+    })
+                                
+                                
+#################### Try again with just:
+#  Acute response first vs Abnormal Response last 
+#  Acute response first vs Normal Response last
+                                
+AcuteID = c(32220, 31874, 31924, 32251, 32196, 32209, 32140, 32054, 32255, 32415, 
+            32131, 31945, 32416)
+Abnormal_Last = c(32220, 32038, 31874, 32124, 32251, 32196, 32415)
+Normal_Last = c(32209, 31207, 32140, 32245, 32054, 32255, 32131, 31945, 32416, 42409)
+
+meta1 <- colData(STM)
+
+firstVisit <- as.data.frame(meta1) %>% dplyr::group_by(PTID) %>%
+    dplyr::arrange(DaysPSO) %>%
+    dplyr::slice_head(n=1) %>% 
+    dplyr::filter(InfectionStages == 'Early Infection')
+
+LastVisit <- as.data.frame(meta1) %>% dplyr::group_by(PTID) %>%
+    dplyr::arrange(DaysPSO) %>%
+    dplyr::slice_tail(n=1) %>% 
+    dplyr::filter(InfectionStages == 'Recovery Phase')
+                                
+meta1$SampleType =  dplyr::case_when(meta1$PTID %in% Normal_Last & 
+                                     meta1$Sample %in% LastVisit$Sample ~ 'NormalLast',
+                                       meta1$PTID %in% Abnormal_Last &
+                                     meta1$Sample %in% LastVisit$Sample ~ 'AbnormalLast',
+                                       meta1$PTID %in% AcuteID &
+                                     meta1$Sample %in% firstVisit$Sample ~ 'AcuteResponse',
+                                     meta1$COVID_status == 'Negative' ~ 'Uninfected',
+                                      TRUE ~ 'Other')
+
+colData(STM) <- meta1
+saveRDS(STM, 'scMACS_SampleTileMatrix.RDS')       
 
 
+compGroups <- list(c('NormalLast',  'AcuteResponse'),
+                  c('AbnormalLast',  'AcuteResponse'),
+                   c('AbnormalLast', 'NormalLast'))
+
+names(compGroups) <- c('Normal_v_Acute', 'Abnormal_v_Acute',
+                       'Abnormal_v_Normal')
+                                
+timeTiles <- sub("\\.",":",Time_Regs$Gene) %>% sub("\\.", "-", .)
+
+allDATsList <- lapply(compGroups, function(x){
+    
+                     getDifferentialAccessibleTiles(STM[rownames(STM) %in% timeTiles,] ,
+                                            cellPopulation = 'CD16 Mono',
+                                           groupColumn = 'SampleType',
+                                           foreground = x[1],
+                                           background = x[2],
+                                           signalThreshold = 12,
+                                           minZeroDiff = 0.5,
+                                           fdrToDisplay = 0.2,
+                                           outputGRanges = TRUE,
+                                           numCores = 15)
+    
+    })
+#1392 differential regions found at FDR 0.2
+#744 differential regions found at FDR 0.2
+#229 differential regions found at FDR 0.2        
+                            
+saveRDS(allDATsList, 'CD16_Trajectory_Part2_DATs.rds')
+
+
+
+
+                                
+##################################################################################################
+                                
+############### Re-running modelings
+                                
+##################################################################################################
+                                
+STM <- readRDS('scMACS_SampleTileMatrix.RDS')
+
+STM2 <- subsetMOCHAObject(STM, subsetBy =  'COVID_status', groupList = 'Positive')
+             
+allAcc <- getCellPopMatrix(STM2, 'CD16 Mono')
+set.seed(1)
+allUMAP <- as.data.frame(uwot::umap(t(allAcc)))
+colnames(allUMAP) <- c('UMAP1','UMAP2')
+allUMAP$Sample <- rownames(allUMAP)
+                                
+subMat <-  colData(STM2) %>% as.data.frame()
+                                
+allUMAP2 <- dplyr::inner_join(allUMAP, subMat, by = 'Sample') %>% arrange(DaysPSO)
+allUMAP2$KMeans <- kmeans(allUMAP2[,c('UMAP1', 'UMAP2')], centers =3, nstart = 100)$cluster
+allUMAP2 <- allUMAP2  %>% dplyr::group_by(PTID) %>%
+                    dplyr::mutate(Last = ifelse(DaysPSO == max(DaysPSO),
+                                                'Last', 'NotLast')) %>%
+                    dplyr::mutate(TrajectoryGroup = 
+                                  ifelse(any(KMeans == 1 & Last == 'Last'),
+                                         'Group 1', 'Group 2'))
+pdf('UMAP_AllTiles.pdf')
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, color = PASC_status, shape = InfectionStages),
+               size = 2) + theme_bw()
+
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, color = DaysPSO, shape = InfectionStages),
+               size = 2) + theme_bw() +
+            scale_colour_gradient(limits = c(0,30))
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color =  PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw()
+
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ AgeGroups)
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ PTID)
+
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ PTID)
+                                
+ggplot(allUMAP2) + 
+    geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages,
+                  color = PASC_status),
+               size = 2.5) +
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = PASC_status),
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    facet_wrap(~ TrajectoryGroup)    
+                                
+ggplot(allUMAP2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID, 
+                  color = as.factor(PTID)),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+                                 geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages),
+               size = 2.5) 
+                                
+                                
+ggplot(allUMAP2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID
+                  ),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5) 
+                                
+                                
+ggplot(allUMAP2) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID
+                  color = batch_id),
+              alpha = 0.30, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "closed")) + theme_bw() +
+            geom_point(aes(x = UMAP1, y= UMAP2, shape = InfectionStages, color = as.factor(KMeans)),
+               size = 2.5)          
+                                
+                                
+dev.off()
+                                
+### Generate UMAP 
+                                
+32416
+42409
+32415
+32255
+31207
+6       1 32245
+7       1 32209
+8       1 32054
+9       1 32131
+10      1 32140
+11      1 31945
+## Older groups                               
+#Group1 = c(32209, 31207, 32140, 32245, 32054, 32255, 32131, 31945, 32416, 42409)
+#Group2 = c(32220, 32038, 31874, 32124, 31924, 32251, 32196, 32415)
+                                
+Group1 = c(32209, 31207, 32140, 32245, 32054, 32255, 32131, 31945, 32416, 42409)
+Group2 = c(32220, 32038, 31874, 32124, 31924, 32251, 32196, 32415)
+                                
+STM_G1 <- subsetMOCHAObject(STM2[rowRanges(STM2)$tileType ==  'Promoter',], 
+                            subsetBy =  'PTID', groupList = Group1)
+STM_G2 <- subsetMOCHAObject(STM2[rowRanges(STM2)$tileType ==  'Promoter',],
+                            subsetBy =  'PTID', groupList = Group2)
+                                
+G1_lmem <- linearModeling(STM_G1,formula = exp ~ Age + sex_at_birth + days_since_symptoms + (1|PTID),
+                          CellType = 'CD16 Mono', numCores = 30)
+                                
+saveRDS(G1_lmem, 'Group1_LinearModel.rds')                             
+G1_lmem <- readRDS('Group1_LinearModel.rds')
+                                
+#Group 2
+G2_lmem <- linearModeling(STM_G2,
+                          formula = exp ~ Age + sex_at_birth + days_since_symptoms + (1|PTID),
+                          CellType = 'CD16 Mono', numCores = 30)
+                               
+saveRDS(G2_lmem, 'Group2_LinearModel.rds')
+G2_lmem <- readRDS('Group2_LinearModel.rds')
+                                
+G1_pval <- parallel::mclapply(seq_along(G1_lmem), function(x) {
+    tryCatch(expr = {summary(G1_lmem[[x]])$coefficients[,5]},
+             error = function(cond){NA})
+}, mc.cores = 20) %>% do.call('rbind',.)
+                                
+saveRDS(G1_pval, 'Group1_LinearModel_PValues.rds')  
+G1_pval <- readRDS('Group1_LinearModel_PValues.rds')  
+                                
+G2_pval <- parallel::mclapply(seq_along(G2_lmem), function(x) {
+    tryCatch(expr = {summary(G2_lmem[[x]])$coefficients[,5]},
+             error = function(cond){NA})
+}, mc.cores = 20) %>% do.call('rbind',.)
+                                
+saveRDS(G2_pval, 'Group2_LinearModel_PValues.rds')                                
+G2_pval <- readRDS('Group2_LinearModel_PValues.rds') 
+
+### Pull out slopes
+G1_slopes <- parallel::mclapply(seq_along(G1_lmem), function(x) {
+    tryCatch(expr = {summary(G1_lmem[[x]])$coefficients[,1]},
+             error = function(cond){NA})
+}, mc.cores = 20) %>% do.call('rbind',.)
+                                
+G2_slopes <- parallel::mclapply(seq_along(G2_lmem), function(x) {
+    tryCatch(expr = {summary(G2_lmem[[x]])$coefficients[,1]},
+             error = function(cond){NA})
+}, mc.cores = 20) %>% do.call('rbind',.)
+
+saveRDS(G1_slopes, 'Group1_LinearModel_Slopes.rds') 
+saveRDS(G2_slopes, 'Group2_LinearModel_Slopes.rds') 
+                                
+G1_slopes <- readRDS('Group1_LinearModel_Slopes.rds') 
+G2_slopes <- readRDS('Group2_LinearModel_Slopes.rds') 
+                                
+G1_combined <- data.frame(Tiles = MOCHA::GRangesToString(rowRanges(STM_G1)),
+                          P_values = as.data.frame(G1_pval)$days_since_symptoms, 
+                          Slopes = as.data.frame(G1_slopes)$days_since_symptoms,
+                         Group = rep('Group1', length(rowRanges(STM_G1))))  
+                          
+G2_combined <- data.frame(Tiles = MOCHA::GRangesToString(rowRanges(STM_G2)),
+                          P_values = as.data.frame(G2_pval)$days_since_symptoms, 
+                          Slopes = as.data.frame(G2_slopes)$days_since_symptoms,
+                         Group = rep('Group2', length(rowRanges(STM_G2))))                          
+volcTiles <- rbind(G1_combined, G2_combined) %>% 
+                dplyr::mutate(Significant = ifelse(P_values < 0.05, 'Significant', 'Not')) %>% 
+                dplyr::mutate(Significant = ifelse(is.na(Significant),'Not' ,Significant ))
+                                
+pdf('VolcanoPlots.pdf')
+         
+ggplot(G1_combined, aes(x = Slopes, y = -log10(P_values))) + 
+                                geom_point() + theme_minimal()+
+            xlab('Slope Accessibility Change over Disease Time Course') +
+            ylab('-log of P-values for Slope')
+
+ggplot(G2_combined, aes(x = Slopes, y = -log10(P_values))) + 
+                                geom_point() + theme_minimal()+
+            xlab('Slope Accessibility Change over Disease Time Course') +
+            ylab('-log of P-values for Slope')
+                                
+ggplot(volcTiles, aes(x = Slopes, y = -log10(P_values), 
+                     color = Significant)) + 
+            geom_point() + theme_minimal() +
+            facet_wrap(~ Group, ncol = 1 ) +
+            scale_color_manual(values=c('Significant' = 'red', 'Not' = 'black') ) +
+            xlab('Slope Accessibility Change over Disease Time Course') +
+            ylab('-log of P-values for Slope')
+            
+                                
+ggplot(volcTiles, aes(x = Slopes, y = -log10(P_values),)) + 
+            geom_point() + theme_minimal() +
+            facet_wrap(~ Group, ncol = 2)+
+            xlab('Slope Accessibility Change over Disease Time Course') +
+            ylab('-log of P-values for Slope')
+ 
+                                
+dev.off()
+                                
+
+PromoGR_G1 <-  rowRanges(STM_G1)
+mcols(PromoGR_G1) <- cbind(mcols(PromoGR_G1), G1_pval)
+                                
+saveRDS(PromoGR_G1, 'Group1_CD16Mono_TimeTiles.rds')
+PromoGR_G1 <- readRDS('Group1_CD16Mono_TimeTiles.rds')
+                                
+                                
+PromoGR_G2 <-  rowRanges(STM_G2)
+G2_pval1 <-  G2_pval
+G1_pval1 <-  G1_pval
+colnames(G1_pval1) <- paste('Pvalue', colnames(G1_pval1), sep = '_')
+colnames(G2_pval1) <- paste('Pvalue', colnames(G2_pval1), sep = '_')
+                                
+mcols(PromoGR_G1) <- cbind(mcols(PromoGR_G1), G1_pval1)
+mcols(PromoGR_G2) <- cbind(mcols(PromoGR_G2), G2_pval1)
+                                
+colnames(G1_slopes) <- paste('Coefficient', colnames(G1_slopes), sep = '_')
+colnames(G2_slopes) <- paste('Coefficient', colnames(G2_slopes), sep = '_')
+                                
+mcols(PromoGR_G1) <- cbind(mcols(PromoGR_G1), G1_slopes)
+mcols(PromoGR_G2) <- cbind(mcols(PromoGR_G2), G2_slopes)
+                                
+saveRDS(PromoGR_G2, 'Group2_CD16Mono_TimeTiles.rds')
+PromoGR_G2 <- readRDS('Group2_CD16Mono_TimeTiles.rds')    
+                                
+write.csv(as.data.frame(plyranges::filter(PromoGR_G2, Pvalue_days_since_symptoms < 0.05)),
+          'SupplementalTable_Group2_Significant_PromoterTiles.csv')
+write.csv(as.data.frame(plyranges::filter(PromoGR_G1,  Pvalue_days_since_symptoms < 0.05)),
+          'SupplementalTable_Group1_Significant_PromoterTiles.csv')
+                                
+
+              
+accMat2 <- getCellPopMatrix(STM_G2, 'CD16 Mono')
+subAccMat2 <- accMat2[rownames(accMat2)  %in% names(PromoGR_G2)[PromoGR_G2$days_since_symptoms < 0.05],]    
+column_ha2 = HeatmapAnnotation(Days =  anno_barplot(colData(STM_G2)$days_since_symptoms[
+    match(colnames(subAccMat2), colData(STM_G2)$Sample)]),
+                        Donor = as.character(colData(STM_G2)$PTID[
+    match(colnames(subAccMat2), colData(STM_G2)$Sample)]))
+                                
+
+     
+    
+accMat1 <- getCellPopMatrix(STM_G1, 'CD16 Mono')
+subAccMat1 <- accMat1[rownames(accMat1)  %in% names(PromoGR_G1)[PromoGR_G1$days_since_symptoms < 0.05],]   
+                                
+column_ha1 = HeatmapAnnotation(Days =  anno_barplot(colData(STM_G1)$days_since_symptoms[
+    match(colnames(subAccMat1), colData(STM_G1)$Sample)]),
+                        Donor = as.character(colData(STM_G1)$PTID[
+    match(colnames(subAccMat1), colData(STM_G1)$Sample)]))
+                                
+col_fun = circlize::colorRamp2(c(0, 12, 20), c("blue", "white", "red"))
+col_fun2 = circlize::colorRamp2(c(0, 5, 20), c("blue", "white", "red"))
+
+pdf('SubGroup_CD16Mono_Heatmaps.pdf')
+                                
+ComplexHeatmap::Heatmap(subAccMat1, top_annotation = column_ha1, 
+                        column_order = order(as.numeric(colData(STM_G1)$days_since_symptoms[
+    match(colnames(subAccMat1), colData(STM_G1)$Sample)])), 
+                        column_title = 'Group 1 Infection Time Course',
+                        #col = col_fun,
+                        heatmap_legend_param = list(col_fun = col_fun),
+                          show_column_names = FALSE,
+                        show_row_names= FALSE)   
+                                
+ComplexHeatmap::Heatmap(subAccMat2, top_annotation = column_ha2, 
+                        column_order = order(as.numeric(colData(STM_G2)$days_since_symptoms[
+    match(colnames(subAccMat2), colData(STM_G2)$Sample)])), 
+                            column_title = 'Group 2 Infection Time Course',
+                        #col = col_fun,
+                        show_column_names = FALSE,
+                        show_row_names= FALSE)   
+
+ComplexHeatmap::Heatmap(subAccMat1, top_annotation = column_ha1, 
+                        column_order = order(as.numeric(colData(STM_G1)$days_since_symptoms[
+    match(colnames(subAccMat1), colData(STM_G1)$Sample)])), 
+                        column_title = 'Group 1 Infection Time Course',
+                        col = col_fun,
+                        heatmap_legend_param = list(col_fun = col_fun),
+                          show_column_names = FALSE,
+                        show_row_names= FALSE)   
+                                
+ComplexHeatmap::Heatmap(subAccMat2, top_annotation = column_ha2, 
+                        column_order = order(as.numeric(colData(STM_G2)$days_since_symptoms[
+    match(colnames(subAccMat2), colData(STM_G2)$Sample)])), 
+                            column_title = 'Group 2 Infection Time Course',
+                        col = col_fun,
+                        show_column_names = FALSE,
+                        show_row_names= FALSE)   
+                                
+ComplexHeatmap::Heatmap(subAccMat1, top_annotation = column_ha1, 
+                        column_order = order(as.numeric(colData(STM_G1)$days_since_symptoms[
+    match(colnames(subAccMat1), colData(STM_G1)$Sample)])), 
+                        column_title = 'Group 1 Infection Time Course',
+                        col = col_fun2,
+                        heatmap_legend_param = list(col_fun = col_fun),
+                          show_column_names = FALSE,
+                        show_row_names= FALSE)   
+                                
+ComplexHeatmap::Heatmap(subAccMat2, top_annotation = column_ha2, 
+                        column_order = order(as.numeric(colData(STM_G2)$days_since_symptoms[
+    match(colnames(subAccMat2), colData(STM_G2)$Sample)])), 
+                            column_title = 'Group 2 Infection Time Course',
+                        col = col_fun2,
+                        show_column_names = FALSE,
+                        show_row_names= FALSE)   
+                                
+
+dev.off()
+                                
+                                
+## Pathway enrichment:
+                                
+G1_geneset <- PromoGR_G1$Gene[PromoGR_G1$Pvalue_days_since_symptoms < 0.05 & !is.na(PromoGR_G1$Pvalue_days_since_symptoms)]  %>% strsplit(., split = ", ") %>% unlist()   %>%
+                                unique()
+ 
+G2_geneset <- PromoGR_G2$Gene[PromoGR_G2$Pvalue_days_since_symptoms < 0.05 & !is.na(PromoGR_G2$Pvalue_days_since_symptoms)]  %>% strsplit(., split = ", ") %>% unlist()   %>%
+                                unique()
+write.table(G1_geneset, 'Group1_Geneset.txt', row.names= F)
+write.table(G2_geneset, 'Group2_Geneset.txt', row.names= F)
+allGenes <- rowRanges(STM)$Gene %>% strsplit(., split = ", ") %>% unlist()   %>%
+                                unique()
+#allMotifs <- getPositions(CD16s, 'CD16LongCISBPMotif')
+enrichDataBaseList <- WebGestaltR::listGeneSet()
+                                
+                   
+GE_G1 <- lapply(enrichDataBaseList$name[c(2,7,8,9,10, 59, 60, 61)], function(x){
+    
+        simplifiedORA(x, G1_geneset , allGenes)
+    
+    })
+                                
+GE_G2 <- lapply(enrichDataBaseList$name[c(2,7,8,9,10, 59, 60, 61)], function(x){
+    
+        simplifiedORA(x, G2_geneset, allGenes)
+    
+    })
+                                
+
+    
+CD16s <- loadArchRProject('CD16sLong')
+
+allGenes2 <- getGenes(CD16s)
+#allMotifs <- getPositions(CD16s, 'CD16LongCISBPMotif')
+                                
+trajGS2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2', 
+                         useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
+CD16s <- addPeakSet(CD16s, rowRanges(STM), force = TRUE)
+CD16s <- addPeakMatrix(CD16s)
+saveArchRProject(CD16s)
+trajPeak2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2', 
+                         useMatrix = "PeakMatrix")
+
+library(TxDb.Hsapiens.UCSC.hg38.refGene)
+library(org.Hs.eg.db)                              
+trajGS2Mat <- plotTrajectoryHeatmap(trajGS2, returnMatrix = TRUE)
+trajPeakMat <- plotTrajectoryHeatmap(trajPeak2, returnMatrix = TRUE)
+                                
+trajTiles <- annotateTiles(MOCHA::StringsToGRanges(gsub("_","-",rownames(trajPeakMat))),
+                          TxDb =TxDb.Hsapiens.UCSC.hg38.refGene, Org = org.Hs.eg.db)
+trajPromoterTiles <- unique(unlist(
+                                lapply(plyranges::filter(trajTiles, tileType == 'Promoter')$Gene,
+                                       function(x){strsplit(x, split= ', ')})))      
+
+GE_Trajectory <- lapply(enrichDataBaseList$name[c(2,7,8,9,10, 59, 60, 61)], function(x){
+    
+          simplifiedORA(x, unique(gsub('.*:','', rownames(trajGS2Mat))),  
+                        unique(as.character(allGenes2$symbol)))
+    
+    })
+                                
+GE_TileTrajectory <- lapply(enrichDataBaseList$name[c(2,7,8,9,10, 59, 60, 61)], function(x){
+    
+          simplifiedORA(x,trajPromoterTiles, allGenes)
+    
+    })
+            
+                   
+saveRDS(list(GE_G1, GE_G2, GE_Trajectory, GE_TileTrajectory),'Fig5_AllPathwayEnrichments.rds')
+
+                   
+                                
+GE_Group1 <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene = G1_geneset, 
+                        interestGeneType ="genesymbol",
+                        referenceGene =   allGenes, 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")     %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Group1') 
+                                
+GE_Group2 <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene = G2_geneset, 
+                        interestGeneType ="genesymbol",
+                        referenceGene =   allGenes, 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")   %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Group2')
+## Plot out Monocle3 trajectory, with a brief comparison to other groups
+GE_Traj <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene = unique(gsub('.*:','', rownames(trajGS2Mat))),
+                        interestGeneType ="genesymbol",
+                        referenceGene = unique(allGenes2$symbol), 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")  %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Monocle3')
+write.csv(GE_Traj[GE_Traj$FDR < 0.05, ], 'SupplementalFigure_Monocle3_Trajectory_GeneScores.csv')
+                                  
+GE_Traj2 <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene =trajPromoterTiles,
+                        interestGeneType ="genesymbol",
+                        referenceGene = allGenes, 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")  %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Monocle3')
+                                
+write.csv(GE_Traj2[GE_Traj2$FDR < 0.05, ], 'SupplementalFigure_Monocle3_Trajectory_AlteredPromoters.csv')
+                                
+library(UpSetR)
+                        
+upsetInput <- list('Group2' = GE_Group2$description[GE_Group2$FDR < 0.05],
+                'Group1' = GE_Group1$description[GE_Group1$FDR < 0.05],
+                'Monocle3' = GE_Traj$description[GE_Traj$FDR < 0.05])
+                                
+upsetInput2 <- list('Group2' = GE_Group2$description[GE_Group2$FDR < 0.05],
+                'Group1' = GE_Group1$description[GE_Group1$FDR < 0.05],
+                'Monocle3' = GE_Traj2$description[GE_Traj2$FDR < 0.05])
+                                
+pdf('Figure5_MonocleTrajectory.pdf')
+                                
+plotTrajectory(CD16s, embedding = "normUMAP", trajectory = 'Trajectory2', name = 'Trajectory2')
+plotTrajectoryHeatmap(trajGS2)
+                                
+ggplot(as.data.frame(GE_Traj[GE_Traj$FDR < 0.05,]), aes(x = description, y = -log10(FDR))) +
+        geom_col() + 
+       xlab('-log10 of FDR') + ylab('Reactime Pathway') + theme_minimal() +
+                                theme(axis.text.x = element_text(angle=-45,vjust = 0.5, hjust=0.5 ))
+                                
+UpSetR::upset(fromList(upsetInput), order.by = "freq", sets.bar.color=c("blue","orange","red"),
+            main.bar.color = c("blue","orange","red", 'black') )
+                                
+plotTrajectoryHeatmap(trajPeak2)
+                                
+ggplot(as.data.frame(GE_Traj2[GE_Traj2$FDR < 0.05,]), aes(x = description, y = -log10(FDR))) +
+        geom_col() + 
+       xlab('-log10 of FDR') + ylab('Reactime Pathway') + theme_minimal() +
+                                theme(axis.text.x = element_text(angle=-45,vjust = 0.5, hjust=0.5 ))
+                                
+UpSetR::upset(fromList(upsetInput2), order.by = "freq", sets.bar.color=c("blue","orange","red"),
+            main.bar.color = c("blue",'black' ,"purple", "orange",'brown', "red") )
+                                
+dev.off()
+                                
+                                
+                                
+## Putting Monocle3 together with others is a mess. Do it separately.             
+toKeep <- c(GE_Group2$description[GE_Group2$FDR < 0.05],
+            GE_Group1$description[GE_Group1$FDR < 0.05])
+   
+## Merge results into one heatmap
+allPathwaysEnrich <- rbind(dplyr::filter(as.data.frame(GE_Group1), description %in% toKeep), 
+                     dplyr::filter(as.data.frame(GE_Group2), description %in% toKeep)) %>%
+                tidyr::pivot_wider(id_cols = 'description', names_from = 'GroupType',
+                                   values_from = "enrichmentRatio")
+allPathwaysFDR <- rbind(dplyr::filter(as.data.frame(GE_Group1), description %in% toKeep), 
+                     dplyr::filter(as.data.frame(GE_Group2), description %in% toKeep)) %>%
+                 tidyr::pivot_wider(id_cols = 'description', names_from = 'GroupType',
+                                   values_from = "FDR")      
+                                
+allPathways <- rbind(dplyr::filter(as.data.frame(GE_Group1), description %in% toKeep), 
+                     dplyr::filter(as.data.frame(GE_Group2), description %in% toKeep)) 
+
+                             
+allPathEnMat <- as.matrix(allPathwaysEnrich[,c('Group1','Group2')])
+allPathFDRMat <- as.matrix(allPathwaysFDR[,c('Group1','Group2')] < 0.05)
+rownames(allPathEnMat) <- allPathwaysEnrich$description
+rownames(allPathFDRMat) <- allPathwaysFDR$description
+all(rownames(allPathEnMat) == rownames(allPathFDRMat))
+                                
+allPathEnMat[is.na(allPathEnMat)] = 0
+allPathFDRMat[is.na(allPathFDRMat)] = 0
+#TRUE
+                                
+rowA <- rowAnnotation(
+    foo = anno_text(stringr::str_wrap(allPathwaysEnrich$description, 35),
+                    just = "left",  gp = gpar(fontsize =5),
+                    location = unit(1, "npc")
+    ), legend_param = list(direction = "horizontal"))
+           
+                
+                                
+pathwayAnnot = dplyr::case_when(
+    grepl('TLR|MyD88|TGF|NTRK1|stimuli|NLR|Interleukin|catenin|NOD',
+          rownames(allPathFDRMat)) ~ 'Immune Response',
+    grepl('UPR|DNA|Apoptot|Repair|Ub|Senescence|Death|Deub', 
+          rownames(allPathFDRMat)) ~ 'DNA Damage & Apoptosis',
+    grepl('Chromatin|pigenetic',  rownames(allPathFDRMat)) ~ 'Epigenetics',
+    grepl('Mitot|G2|Separation|Cell Cycle',  rownames(allPathFDRMat)) ~ 'Cell Cycle',
+    TRUE ~ "Other")
+                                
+pathwayAnnot2 = dplyr::case_when(
+       grepl('TLR|MyD88|TGF|NTRK1|stimuli|NLR|Interleukin|catenin|NOD',
+             allPathways$description) ~ 'Immune Response',
+    grepl('UPR|DNA|Apoptot|Repair|Ub|Senescence|Death|Deub',
+          allPathways$description) ~ 'DNA Damage & Apoptosis',
+    grepl('Chromatin|pigenetic',   allPathways$description) ~ 'Epigenetics',
+    grepl('Signaling|GTPase',   allPathways$description) ~ 'General Signaling',
+    grepl('Neuro',   allPathways$description) ~ 'Neurodegeneration',
+    grepl('Mitot|G2|Separation|Cell Cycle',   allPathways$description) ~ 'Cell Cycle',
+    TRUE ~ "Other")
+                                
+                                
+allPathwaysFDR$pathwayAnnot <- pathwayAnnot
+allPathwaysEnrich$pathwayAnnot <- pathwayAnnot  
+allPathways$pathwayAnnot <- pathwayAnnot2
+
+col_fun1 = colorRamp2(c(1, 2.5), c("white", "red"))
+                                
+pathTypeColors <- c('green','brown', 'purple', 'yellow', 'black')
+names(pathTypeColors) <- unique(pathwayAnnot)
+                                
+rowA2 <- rowAnnotation(
+    Group1 = as.data.frame(allPathwaysFDR[,c('Group1')]) < 0.05,
+    Group2 = as.data.frame(allPathwaysFDR[,c('Group2')]) < 0.05,
+    Type = pathwayAnnot,
+    col = list(Group1 = c('FALSE' = 'white', 'TRUE' = 'blue'), 
+               Group2 = c('FALSE' = 'white', 'TRUE' = 'blue'), 
+               Type = pathTypeColors) ,
+    
+    legend_param = list(direction = "horizontal",direction = "horizontal",direction = "horizontal" ))
+                                
+                                
+#FDRH <- ComplexHeatmap::Heatmap(allPathFDRMat, name = '-log FDR',
+#                                width = unit(2, "cm"),
+#                               cluster_columns=  FALSE,
+#                                show_row_dend = FALSE,
+#                                #col = col_fun2,
+#                                heatmap_legend_param = list(labels =c('False', 'True'), 
+#                                                             title = "FDR < 0.05", 
+#                                                             legend_gp = gpar(fill = 1:2),
+#                                                            direction = "horizontal"),
+#                                right_annotation = rowAnnotation('Type' = pathwayAnnot),
+#                                row_names_gp = gpar(fontsize = 12),
+#                                  column_title= 'Significance')
+     
+#H_list <- EnH + FDRH 
+                                
+EnH <- ComplexHeatmap::Heatmap(allPathEnMat, name = 'Enrichment Ratio',
+                               cluster_columns=  FALSE,
+                                width = unit(2, "cm"),
+                                #show_row_names = FALSE, 
+                               #right_annotation = rowA,
+                              show_row_dend = FALSE,
+                               col = col_fun1,
+                            right_annotation = rowA2,
+                              heatmap_legend_param = list(direction = "horizontal"),
+                             row_names_gp = gpar(fontsize = 12),
+                               column_title= 'Enrichment')
+                                
+                                
+pdf('SubGroup_CD16Mono_Pathway_Heatmaps.pdf')
+ 
+EnH
+#FDRH
+                                
+draw(EnH, heatmap_legend_side = "bottom")
+                   
+ggplot(allPathways, aes(x = GroupType, y = str_wrap(description, 30), 
+                        color = enrichmentRatio,
+                       size = -log10(FDR))) +
+                   geom_point() +  
+                   scale_size_continuous(range = c(0, 4)) + theme_minimal()
+                   
+                   
+ggplot(allPathways, aes(x = -log10(FDR), y = enrichmentRatio, 
+                        color = pathwayAnnot)) +
+                   geom_point() +  
+                   scale_size_continuous(range = c(0, 4)) + theme_minimal() +
+                   facet_wrap(~GroupType)
+
+
+                                
+dev.off()
+                                
+sumSigPathways <- allPathwaysFDR %>% 
+                    tidyr::pivot_longer(cols = c('Group1', 'Group2'), names_to = 'Group',
+                                        values_to = 'PValues') %>%
+                        dplyr::filter(PValues < 0.05) %>% #dplyr::mutate(PValues = PValues < 0.05) %>%
+                    dplyr::group_by(Group, pathwayAnnot) %>% dplyr::summarize(PathNumb = dplyr::n()) %>%
+                    dplyr::mutate(pathwayAnnot = factor(pathwayAnnot, 
+                            levels = c('Immune Response', 'Cell Cycle', 'Epigenetics', 
+                                       'DNA Damage & Apoptosis', 'Other')))
+            
+                                
+pdf('SubGroup_CD16Mono_Pathway_BarChart.pdf')
+         
+ggplot(sumSigPathways, aes(x = Group, y = PathNumb,
+                           fill = pathwayAnnot)) +
+                        scale_fill_manual(values = pathTypeColors) + geom_col(position = 'dodge') +
+                    theme_minimal() + xlab('Response Group') + ylab('Number of Enriched Pathways')                  
+                                
+dev.off()
+                   
+#################################################################
+                   
+#### 
+library(chromVAR)
+library(chromVARmotifs)
+data(human_pwms_v2)
+
+STM <- addMotifSet(STM, pwms = human_pwms_v2,
+                      w = 7, returnObj = TRUE, motifSetName = "Motifs")
+                   
+saveRDS(STM, 'scMACS_SampleTileMatrix.RDS')
+                   
+
+### Generate a heatmap:
+#Each row is one gene, each column is one sample, ranked by days since symptoms. 
+## Donor ID information as bar at the top. 
+                                
+### Then generate a heatmap of pathway enrichment for all pathways detected in Group 1 and Group 2. 
+                                
+        
+###### Functions used. 
+                        
+simplifiedORA <- function(database, foreground, background){
+    
+    WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = database,
+                         interestGene = foreground, 
+                        interestGeneType ="genesymbol",
+                        referenceGene =  background, 
+                            referenceGeneType= "genesymbol")
+    
+    }
