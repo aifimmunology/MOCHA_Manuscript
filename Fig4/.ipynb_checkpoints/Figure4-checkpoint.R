@@ -463,46 +463,26 @@ endT <- Sys.time() - startT
 
 saveRDS(tssLinks, 'Links_BackgroundTSS_Unfiltered.rds')
 tssLinks <- readRDS('Links_BackgroundTSS_Unfiltered.rds')
-tssLinks2 <- tssLinks[tssLinks$Tile1 %in% GRangesToString(filter_by_overlaps(StringsToGRanges(tssLinks$Tile1), oldSpec)), ]
 
 tssLinksf <- filterCoAccessibleLinks(tssLinks, threshold = 0.5)
-tssLinksf2 <- filterCoAccessibleLinks(tssLinks2, threshold = 0.5)
 allTSS_Network <- c(tssLinksf$Tile1, tssLinksf$Tile2) %>%
                    unique() %>% StringsToGRanges(.) %>% c(.,specTSS) %>%
                 plyranges::filter_by_overlaps(daps, .)
- allTSS_Network2 <- c(tssLinksf2$Tile1, tssLinksf2$Tile2) %>%
-                   unique() %>% StringsToGRanges(.) %>% c(.,oldSpec) %>%
-                plyranges::filter_by_overlaps(daps, .)                                 
-backGround = filter_by_non_overlaps(allTSS_Network2, altTSS_Network)
+
+backGround = filter_by_non_overlaps(allTSS_Network, altTSS_Network)
 
 ## Get motifs
 posList <- metadata(STM)$CISBP
 
 ## Run enrichment: AltTSS Network vs all TSS Network, DAPs vs nonDAPs
-enrich_df <- MotifEnrichment(foreGround,backGround, posList, numCores = 40)
-    
-sum(enrich_df$adjp_val < 0.05)
-                                  
-enrich_df2 <- MotifEnrichment(altTSS_Network,backGround, posList, numCores = 55)
-    
-sum(enrich_df2$adjp_val < 0.05)
-rownames(enrich_df2)[enrich_df2$adjp_val < 0.05]
-enrich_df2[grepl('CEB',rownames(enrich_df2)),]                                 
+
+enrich_df <- MotifEnrichment(altTSS_Network,backGround, posList, numCores = 55)
+                    
 write.csv(enrich_df, 'CD16_MotifEnrichment_AltTSS_v2.csv')
-                                  
-sum(p.adjust(enrich_df2$p_value, method = 'fdr') < 0.05)
-rownames(enrich_df2)[p.adjust(enrich_df2$p_value, method = 'fdr') < 0.05]
-  
-enrich_df2$FDR <- p.adjust(enrich_df2$p_value, method = 'fdr')
-                                              
-old <- read.csv('CD16_MotifEnrichment_AltTSS.csv')
-                                  sum(old$adjp_val < 0.05)
-old$X[old$adjp_val < 0.05]
-                                  
-enrich_df <- read.csv('CD16_MotifEnrichment_AltTSS.csv', row.names = TRUE)
+                                                                           
+#old <- read.csv('CD16_MotifEnrichment_AltTSS.csv')
 
-
-enrich_df2 <- enrich_df2  %>% 
+enrich_df2 <- enrich_df  %>% 
                 dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.)),
                                                 mlog10FDR = -log10(FDR)) %>%
                 dplyr::mutate(label = ifelse(FDR < 0.05, TranscriptionFactor, NA))
@@ -607,13 +587,18 @@ LM_df <- ligandtf[rownames(ligandtf) %in%
                         unique(sigMotifs$name), sigLigands$ligand] %>%
                 melt() %>% dplyr::filter(value > 0) %>% dplyr::rename(Motif = Var1, Ligand = Var2) %>%
                 dplyr::select(Ligand,Motif)
-colnames(LM_df) <- c('To', 'From')
-colnames(GM_df) <- c('To', 'From')                                  
+colnames(LM_df) <- c('From', 'To')
+colnames(GM_df) <- c('From', 'To')                                  
 
 write.table(rbind(LM_df, GM_df), 'DAPS_Network_Edges_final.tsv', sep='\t')
                                   
 NodeTable <- do.call('rbind', list(sigMotifs, geneEffect, filtedLigands))
+                                  
+notes <- read.csv('SupplementalTable_X_CEBPA_NodeTable.csv') %>% 
+                                  dplyr::select(name, COVID, Detail, Reference)
+NodeTable <- left_join(NodeTable, notes, by = 'name')                                  
 write.csv(NodeTable, 'DAPs_NodeTable_final.csv')
+                                  
                         
 
 ############################################################################################

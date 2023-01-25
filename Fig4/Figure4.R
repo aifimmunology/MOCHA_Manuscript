@@ -475,30 +475,14 @@ backGround = filter_by_non_overlaps(allTSS_Network, altTSS_Network)
 posList <- metadata(STM)$CISBP
 
 ## Run enrichment: AltTSS Network vs all TSS Network, DAPs vs nonDAPs
-enrich_df <- MotifEnrichment(foreGround,backGround, posList, numCores = 40)
-    
-sum(enrich_df$adjp_val < 0.05)
-                                  
-enrich_df2 <- MotifEnrichment(altTSS_Network,backGround, posList, numCores = 55)
-    
-sum(enrich_df2$adjp_val < 0.05)
-rownames(enrich_df2)[enrich_df2$adjp_val < 0.05]
-enrich_df2[grepl('CEB',rownames(enrich_df2)),]                                 
+
+enrich_df <- MotifEnrichment(altTSS_Network,backGround, posList, numCores = 55)
+                    
 write.csv(enrich_df, 'CD16_MotifEnrichment_AltTSS_v2.csv')
-                                  
-sum(p.adjust(enrich_df2$p_value, method = 'fdr') < 0.05)
-rownames(enrich_df2)[p.adjust(enrich_df2$p_value, method = 'fdr') < 0.05]
-  
-enrich_df2$FDR <- p.adjust(enrich_df2$p_value, method = 'fdr')
-                                              
-old <- read.csv('CD16_MotifEnrichment_AltTSS.csv')
-                                  sum(old$adjp_val < 0.05)
-old$X[old$adjp_val < 0.05]
-                                  
-enrich_df <- read.csv('CD16_MotifEnrichment_AltTSS.csv', row.names = TRUE)
+                                                                           
+#old <- read.csv('CD16_MotifEnrichment_AltTSS.csv')
 
-
-enrich_df2 <- enrich_df2  %>% 
+enrich_df2 <- enrich_df  %>% 
                 dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.)),
                                                 mlog10FDR = -log10(FDR)) %>%
                 dplyr::mutate(label = ifelse(FDR < 0.05, TranscriptionFactor, NA))
