@@ -25,21 +25,21 @@ tileResults <- MOCHA::callOpenTiles(
     TxDb = TxDb.Hsapiens.UCSC.hg38.refGene,
     Org = org.Hs.eg.db,
     studySignal = studySignal,
-    numCores = 25
+    outDir = NULL,
+    numCores = 35
 )
 
 saveRDS(tileResults, 'scMACS_tileResults_CD16.RDS')
 
 SampleTileObj <-  MOCHA::getSampleTileMatrix( 
     tileResults,
-    groupColumn= 'InfectionStages',
+    groupColumn= 'Stage',
     threshold = 0.2,
     numCores = 35,
 )
 SampleTileObj <- annotateTiles(SampleTileObj)
 
 saveRDS(SampleTileObj, 'scMACS_SampleTileMatrix.RDS')
-
 
 ###############################
 
@@ -362,6 +362,19 @@ set.seed(2)
 umapAll <- as.data.frame(uwot::umap(2^t(sampleMat)-1), min_dist = 0.025)
 colnames(umapAll ) = c('UMAP1', 'UMAP2')
 umapAll$Sample <- rownames(umapAll)
+                   
+
+
+colData(STM2) %>% as.data.frame() %>% filter(VisitType == 'Last') %>%
+    select(days_since_symptoms) %>% unlist() %>% summary()
+colData(STM2) %>% as.data.frame() %>% filter(VisitType == 'Last' & ResponseType == 'Group1') %>%
+    select(days_since_symptoms) %>% unlist() %>% summary()
+colData(STM2) %>% as.data.frame() %>% filter(VisitType == 'Last' & ResponseType == 'Group2') %>%
+    select(days_since_symptoms) %>% unlist() %>% summary()                   
+STM2 <- subsetMOCHAObject(STM, subsetBy = 'COVID_status', groupList = 'Positive')
+sampleMat <- assays(STM2)[['CD16 Mono']]
+sampleMat[is.na(sampleMat)] = 0
+                   
 
 umapAll<- inner_join(umapAll, as.data.frame(colData(STM2)), by = 'Sample') %>% arrange(DaysPSO)
 
@@ -476,10 +489,37 @@ ggplot(umapAll) +
                                 
 dev.off()
                                 
-
-                                            
-
-    
+umapList <- read.csv('Pseudobulk_UMAP_Longitudinal_CD16s.csv') %>%
+                   dplyr::left_join(select(as.data.frame(colData(STM)), c(Sample, days_since_symptoms)), by = 'Sample')
+pdf('Pseudbulk_Projection_LastTimepoint.pdf')
+ggplot(umapList) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.40, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    geom_point(aes(x = UMAP1, y= UMAP2,
+                color = PASC_status, shape = InfectionStages))  
+                   
+ggplot(umapList) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.40, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    geom_point(aes(x = UMAP1, y= UMAP2,
+                color = days_since_symptoms, shape = InfectionStages))
+                   
+ggplot(umapList) + 
+    geom_path(aes(x = UMAP1, y = UMAP2, group = PTID),
+              alpha = 0.40, linejoin = "mitre",
+             arrow = arrow(angle = 30, 
+                           length = unit(0.25, "inches"),
+      ends = "last", type = "open")) + theme_bw() +
+    geom_point(aes(x = UMAP1, y= UMAP2, 
+               color = days_since_symptoms >= 60))  
+dev.off()
+                   
 ################################################################
 
 ##Identify groups of donors based on Normal and Abnormal Response
@@ -870,9 +910,7 @@ cellMat <- getCellPopMatrix(STM[specPromo,], 'CD16 Mono') %>% as.data.frame() %>
                                            grepl(specGenes[5], Gene) ~ specGenes[5])) %>%
                    dplyr::mutate(GeneTile = paste(Gene, Tile, sep = "_"))  %>%
                    dplyr::mutate(NA_Accessibility = ifelse(Log2_Accessibility == 0, NA, 
-                                                           Log2_Accessibility))
-
-                   
+                                                           Log2_Accessibility))      
                    
 pdf('InflammationGenes_Trajectory.pdf')
                    
@@ -1399,24 +1437,76 @@ allEnrichments <- lapply(seq_along(geneSets), function(y){
             dplyr::mutate(Group = GroupsNames[y])
     
     })
+                        
+names(allEnrichments) <- gsub("_Z"," With Z",gsub("_No"," Without ",GroupsNames))
                                    
 combEnrich <- data.table::rbindlist(allEnrichments, use.names = TRUE) %>% as.data.frame() %>%
                     group_by(description) %>% filter(any(FDR < 0.05))           
                     
-                   
-    
+write.csv(combEnrich, 'Fig5_Group_PathwayEnrichment.csv')                
                                
 Hierarch <- read.csv('ReactomePathwaysRelation.csv', col.names = c('V1', 'V2'))
 ReactID <- read.csv('ReactomePathways.csv', col.names = c('V1', 'V2','V3'))
 ReactID$V2 <- sub(" $","",ReactID$V2)
                                
-                   
+desc_tree <- unlist(lapply(combEnrich$description, 
+                 function(x) findTrunk(x, Hierarch, ReactID, exportTree = TRUE)))
+                    
+desc_tree_secLast <- lapply(grep('Immune|DNA', desc_tree, value = TRUE), function(x){
+            pathList <- unlist(str_split(x, pattern = ', '))
+            case_when(length(pathList) == 1 ~ x,
+                    grepl('NLR', pathList[length(pathList) - 1]) ~ 'Innate Immune System',
+                    grepl('Interleukin', pathList[length(pathList) - 1]) ~ 'Cytokine Signaling in Immune system',
+                    grepl('NER', pathList[length(pathList) - 1]) ~ 'Nucleotide Excision Repair',
+                    length(pathList) > 1 ~ pathList[length(pathList) - 1],
+                    TRUE ~ 'Error') %>% unique()
+    
+    })  %>% unlist()
+
+desc_tree_secLast <- lapply(grep('Immune|DNA', desc_tree, value = TRUE), function(x){
+            pathList <- unlist(str_split(x, pattern = ', '))
+            ifelse(length(pathList) == 1, x,
+                ifelse(grepl('NLR', pathList[length(pathList) - 1]), 'Innate Immune System',
+                ifelse(grepl('Interleukin', pathList[length(pathList) - 1]), 'Cytokine Signaling in Immune system',
+                ifelse(grepl('NER', pathList[length(pathList) - 1]), 'Nucleotide Excision Repair',
+                ifelse(length(pathList) > 1, pathList[length(pathList) - 1],
+                    'Error')))))
+    
+    })  %>% unlist()
+                           
+#Signaling By Interleukins is apart of Cytokine Signaling in Immune System
+#NLR signaling is apart of the Innate Immune system
+
 pathwayAnnot_all = unlist(lapply(combEnrich$description, 
                              function(x) findTrunk(x, Hierarch, ReactID))) 
 pathwayAnnot_all[grepl('external stimuli', pathwayAnnot_all)] = 
                                  'Cellular responses to stimuli'  
                                  
 combEnrich$Type <- pathwayAnnot_all
+                           
+subCombEnrich <- combEnrich[grepl('Immune|DNA', desc_tree),]
+subCombEnrich$Level2 <- desc_tree_secLast
+pathSummary <- filter(subCombEnrich, FDR < 0.05) %>% group_by(Group, Level2) %>% summarize(PathNum = dplyr::n()) %>%
+                                 dplyr::mutate(Method = sub(".*_","",Group)) %>% mutate(Group = sub("_.*","", Group)) 
+pathGroupList <- combEnrich %>% filter(FDR < 0.05 & grepl('Group1', Group)) %>%
+                                 dplyr::mutate(Method = sub(".*_","",Group)) %>%  ungroup() %>% 
+                         select(description, Method, Group) %>% arrange(Method) %>% group_split(Method) %>% 
+                                lapply(., function(x) { select(x, description) %>% unlist() })
+names(pathGroupList) <- c('WithoutZeros','WithZeros')
+
+library(UpSetR)
+                                 
+                                 
+pdf('Fig5_Modeling_Level2Pathways.pdf')
+       
+ggplot(pathSummary, aes(x = Method, y = PathNum, fill = Level2)) + 
+                                 geom_col(position = "dodge") + facet_wrap(~Group)
+                                 
+                                 
+UpSetR::upset(fromList(pathGroupList), order.by = "freq")
+                                 
+dev.off()
+
                                  
 allPathwaySum <- combEnrich %>% 
                     dplyr::select(description, FDR, enrichmentRatio, Group, Type) %>% 
@@ -1568,6 +1658,150 @@ ggplot(allPathwaySum, aes(x = Group, y = PathNumb,
                                ylab('Number of Enriched Pathways')                                    
                                  
 dev.off()
+                                 
+################################################################################
+                            
+### Compare pathways with/without zeros with genescore and peak-matrix trajectories
+                                 
+CD16s <- loadArchRProject('CD16sLong')
+
+allGenes2 <- getGenes(CD16s)
+#allMotifs <- getPositions(CD16s, 'CD16LongCISBPMotif')
+                                
+trajGS2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2', 
+                         useMatrix = "GeneScoreMatrix", log2Norm = TRUE)
+CD16s <- addPeakSet(CD16s, rowRanges(STM), force = TRUE)
+CD16s <- addPeakMatrix(CD16s)
+library(BSgenome.Hsapiens.UCSC.hg38)
+CD16s <- addMotifAnnotations(CD16s, name = 'CD16LongCISBPMotif', force = TRUE)
+
+CD16s <- addDeviationsMatrix(CD16s, 
+            peakAnnotation = 'CD16LongCISBPMotif',     
+            matrixName = 'CD16LongCISBPMatrix2',
+                             force = TRUE)
+
+                                
+saveArchRProject(CD16s)
+trajPeak2 <- getTrajectory(ArchRProj = CD16s, name = 'Trajectory2', 
+                         useMatrix = "PeakMatrix")
+
+library(TxDb.Hsapiens.UCSC.hg38.refGene)
+library(org.Hs.eg.db)                              
+trajGS2Mat <- plotTrajectoryHeatmap(trajGS2, returnMatrix = TRUE)
+trajPeakMat <- plotTrajectoryHeatmap(trajPeak2, returnMatrix = TRUE)
+                                
+trajTiles <- annotateTiles(MOCHA::StringsToGRanges(gsub("_","-",rownames(trajPeakMat))),
+                          TxDb =TxDb.Hsapiens.UCSC.hg38.refGene, Org = org.Hs.eg.db)
+trajPromoterTiles <- unique(unlist(
+                                lapply(plyranges::filter(trajTiles, tileType == 'Promoter')$Gene,
+                                       function(x){strsplit(x, split= ', ')})))      
+
+## Plot out Monocle3 trajectory, with a brief comparison to other groups
+GE_Traj <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene = unique(gsub('.*:','', rownames(trajGS2Mat))),
+                        interestGeneType ="genesymbol",
+                        referenceGene = unique(allGenes2$symbol), 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")  %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Monocle3')
+write.csv(GE_Traj[GE_Traj$FDR < 0.05, ], 'SupplementalFigure_Monocle3_Trajectory_GeneScores.csv')
+                                  
+GE_Traj2 <- WebGestaltR::WebGestaltR(enrichMethods = 'ORA', organism ='hsapiens', 
+                         enrichDatabase = enrichDataBaseList$name[9],
+                         interestGene =trajPromoterTiles,
+                        interestGeneType ="genesymbol",
+                        referenceGene = allGenes, 
+                                    fdrThr = 1,
+                            referenceGeneType= "genesymbol")  %>% as.data.frame() %>%
+                        dplyr::mutate(GroupType = 'Monocle3')
+                                
+write.csv(GE_Traj2[GE_Traj2$FDR < 0.05, ], 'SupplementalFigure_Monocle3_Trajectory_AlteredPromoters.csv')
+ 
+GE_Traj <- read.csv('SupplementalFigure_Monocle3_Trajectory_GeneScores.csv')
+GE_Traj2 <- read.csv('SupplementalFigure_Monocle3_Trajectory_AlteredPromoters.csv')
+                                 
+library(UpSetR)
+                                 
+
+## Set up upset plot data         
+upsetInput <- list( 'Group 1' = unique(unlist(lapply(allEnrichments[c(1,3)], 
+                                                function(x) x$description[x$FDR < 0.05]))),
+                             'Group 2' = unique(unlist(lapply(allEnrichments[c(2,4)], 
+                                                function(x) x$description[x$FDR < 0.05]))),
+                   'Monocle3 GeneScore' = GE_Traj$description[GE_Traj$FDR < 0.05],
+                  'Monocle3 Peak Matrix'= GE_Traj2$description[GE_Traj2$FDR < 0.05])
+                 
+colorSet1 <- RColorBrewer::brewer.pal(9, "Set1")
+                                                       
+## Set up group annotations
+                                                       
+Hierarch <- read.csv('ReactomePathwaysRelation.csv', col.names = c('V1', 'V2'))
+ReactID <- read.csv('ReactomePathways.csv', col.names = c('V1', 'V2','V3'))
+ReactID$V2 <- sub(" $","",ReactID$V2)
+                               
+                   
+MonoclePathAnnot = lapply(upsetInput[c(3:4)], function(y)
+                    unlist(lapply(y, 
+                             function(x) findTrunk(x, Hierarch, ReactID)))) 
+
+MonoclePathTable = lapply(MonoclePathAnnot, function(y){
+                        y[grepl('external stimuli|ATF4 activates genes|HSP90 chaperone|HIF', y)] = 
+                                 'Cellular responses to stimuli'
+                         y[grepl('Diseases|mutants|Influenza|BRAF and RAF fusions', y)] = 
+                                 'Disease'
+                        y[grepl('CDT1 association with the CDC6:ORC:origin complex', y)] = 
+                                 'DNA Replication'
+                        y[grepl('Cleavage of Growing Transcript', y)] = 
+                                 'Gene expression (Transcription)'
+                        y[grepl('etabolism|Nucleobase biosynthesis', y)] = 
+                                 'Metabolism'
+                        y[grepl('Mitotic|Cyclin', y)] = 
+                                 'Cell Cycle'
+                        y[grepl('mTOR signalling', y)] = 
+                                 'Signal Transduction'
+                        y[grepl('Mitophagy', y)] = 
+                                 'Autophagy'
+                        y[grepl('Apoptosis', y)] = 
+                                 'Programmed Cell Death'
+                        y
+    }) %>% stack() %>% dplyr::rename('Group' = ind, 'Type' = values) %>% 
+    dplyr::group_by(Group, Type) %>% dplyr::summarize(Num = dplyr::n())
+                                
+
+                                
+pdf('Figure5_MonocleTrajectory_Comparison.pdf')
+                                
+plotTrajectory(CD16s, embedding = "normUMAP", trajectory = 'Trajectory2', name = 'Trajectory2')
+plotTrajectoryHeatmap(trajGS2)
+                                
+ggplot(as.data.frame(GE_Traj[GE_Traj$FDR < 0.05,]), aes(x = description, y = -log10(FDR))) +
+        geom_col() + 
+       xlab('-log10 of FDR') + ylab('Reactime Pathway') + theme_minimal() +
+                                theme(axis.text.x = element_text(angle=-45,vjust = 0.5, hjust=0.5 ))
+                                
+#UpSetR::upset(fromList(upsetInput), order.by = "freq", sets.bar.color=c("blue","orange","red"),
+##            main.bar.color = c("blue","orange","red", 'black') )
+                                
+plotTrajectoryHeatmap(trajPeak2)
+                                
+ggplot(as.data.frame(GE_Traj2[GE_Traj2$FDR < 0.05,]), aes(x = description, y = -log10(FDR))) +
+        geom_col() + 
+       xlab('-log10 of FDR') + ylab('Reactime Pathway') + theme_minimal() +
+                                theme(axis.text.x = element_text(angle=-45,vjust = 0.5, hjust=0.5 ))
+                     
+UpSetR::upset(fromList(upsetInput), order.by = "freq", sets.bar.color=c("blue","orange","red",'darkgreen'),
+            main.bar.color = colorSet1 )
+                                  
+ggplot(MonoclePathTable, aes(x = Group, y = Num,
+                            fill = Type)) +
+       #  scale_fill_manual(values = allColors) + 
+         geom_col(position = 'dodge') + 
+    theme_minimal() + xlab('Response Group') + facet_wrap(~ Group, ncol = 2, scales = "free") +
+                               ylab('Number of Enriched Pathways')   
+                                
+dev.off()                  
+                             
                     
 #################################################################
                    
@@ -1575,35 +1809,49 @@ dev.off()
 library(chromVAR)
 library(chromVARmotifs)
 data(human_pwms_v2)
+                                  
+STM_All <- readRDS('../COVID scATAC Manuscript/SampleTileObject.rds')
 
-STM <- addMotifSet(STM, pwms = human_pwms_v2,
+STM_All <- addMotifSet(STM_All, pwms = human_pwms_v2,
                       w = 7, returnObj = TRUE, motifSetName = "Motifs")
                    
-saveRDS(STM, 'scMACS_SampleTileMatrix.RDS')
-              
+saveRDS(STM_All, 'MOCHA_All_SampleTileMatrix.RDS')
+STM_All <- readRDS('MOCHA_All_SampleTileMatrix.RDS')
+                                  
 library(BSgenome.Hsapiens.UCSC.hg38)
 library(SummarizedExperiment)
 library(tidyverse)
 library(plyranges)
               
-assayList <- getCellPopMatrix(STM, 'CD16 Mono')
+assayList <- do.call('cbind', as.list(SummarizedExperiment::assays(STM_All)))
+colnames(assayList) <- unlist(lapply(names(SummarizedExperiment::assays(STM_All)), function(x){
+    
+                        paste(x, colnames(STM_All), sep = "_")
+                
+    }))
+nonEmptySamples <- apply(assayList, 2, function(x) !all(is.na(x)))
+
+assayList <- assayList[,nonEmptySamples]
         
 Obj1 <- SummarizedExperiment(
     assays = list('counts' = assayList),
-    colData = colData(STM),
-    rowRanges = rowRanges(STM),
-    metadata = STM@metadata
+    colData = colData(STM_All),
+    rowRanges = rowRanges(STM_All),
+    metadata = STM_All@metadata
 )
 
-CisbpAnno <- chromVAR::getAnnotationslinear(STM@metadata$Motifs,
+CisbpAnno <- chromVAR::getAnnotations(STM@metadata$Motifs,
                                       rowRanges = rowRanges(Obj1))
 
-Obj1 <- chromVAR::addGCBias(Obj1, genome = BSgenome.Hsapiens.UCSC.hg38)
+Obj1 <- chromVAR::addGCBias(Obj1, genome = STM@metadata$Genome)
 backPeaks <- getBackgroundPeaks(Obj1) 
                                
 dev <- chromVAR::computeDeviations(object = Obj1, 
                          annotations = CisbpAnno)
-saveRDS(dev, 'STM_ChromVAR.rds')
+                                  
+assays(dev)[[2]]
+                                  
+saveRDS(dev, 'STM_ChromVAR2.rds')
                     
 Group1 = c(32209, 31207, 32140, 32245, 32054, 32255, 32131, 31945, 32416, 42409)
 Group2 = c(32220, 32038, 31874, 32124, 31924, 32251, 32196, 32415)   
@@ -1664,14 +1912,166 @@ pdf('Fig5_ChromVar_modeling.pdf')
                          aes(label = TF))
                          
 dev.off()
+                         
+#### Ligand MSEA on pvalues
+                         
+gr_network
+                                                       
+##### Compare with Monocle3 ChromVar trajectory
+                                                       
+devModels <- read.csv('chromVar_deviations.csv')
+                                  
+ligand_tf <- readRDS('ligand_tf_matrix.rds')
+                         
+tmp2 <- read.table('Group2_TFs_testing.txt')
+tmp3 <- [apply(ligand_tf[rownames(ligand_tf) %in% tmp2[,1],], 1, function(x) colnames(ligand_tf)[x > 0])]
+                                  
+MSEA(filteredTF,
+                filter(ligandModel, Group == 'Group2'), 
+                motifColumn = "TranscriptionFactor", 
+                ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                stat_column = 'logpval',
+                                        stat_threshold = 1.3, 
+                                       annotationName = 'CellType', annotation = "none", 
+                                       numCores = 30, verbose = FALSE) %>%
+                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA))
+                         
+modelRes <- read.csv('quadratic_model.csv')
 
-### Generate a heatmap:
-#Each row is one gene, each column is one sample, ranked by days since symptoms. 
-## Donor ID information as bar at the top. 
-                                
-### Then generate a heatmap of pathway enrichment for all pathways detected in Group 1 and Group 2. 
-                                
-        
+topPValue <- base::pmin(modelRes$time_pvals, modelRes$time_sqrd_pvals)
+
+ligandModel <- data.frame(TranscriptionFactor = modelRes$TF, 
+                          Pvalue = as.numeric(topPValue), 
+                          Group = modelRes$Group)
+                   
+                   
+ligandModel2 <- ligandModel %>% tidyr::pivot_wider(id_cols = 'TranscriptionFactor', names_from = 'Group', values_from = Pvalue)
+ligandModel3 <- modelRes %>% 
+                   #dplyr::filter(time_pvals < 0.05 | time_sqrd_pvals < 0.05) %>%
+                   tidyr::pivot_wider(id_cols = 'TF', names_from = 'Group', 
+                                      values_from = 'time_coefs')
+                   
+write.csv(ligandModel2, 'ModelingTFs_value.csv')
+write.csv(ligandModel3, 'ModelingTFs_slopes.csv')
+ligandModel$logpval <- -log10(ligandModel$Pvalue)                  
+filteredTF <- ligand_tf[rownames(ligand_tf) %in% unique(ligandModel$TranscriptionFactor), ]       
+                    
+tmp <- PHyperLigandTF(filteredTF, filter(ligandModel, Group == 'Group1'), 'ZNF8',
+               motifColumn = 'TranscriptionFactor', stat_column = 'Pvalue',
+               stat_threshold = 0.05, verbose = TRUE)
+                   
+tmp <- PHyperLigandTF(ligand_tf, filter(ligandModel, Group == 'Group1'), 'BMP3',
+               motifColumn = 'TranscriptionFactor', stat_column = 'logpval',
+               stat_threshold = 1.3, verbose = TRUE)
+                   
+1] "TF Overlap: 788"
+[1] "All TF by Any Ligand: 788"
+[1] "Significantly Enriched Motifs: 581"
+[1] "Enriched TF Downstream of Ligand: 5"
+[1] 0
+mergedDF_f <-  tmp[as.numeric(tmp[,Pvalue]) > 0.05,]              
+                   
+MSEA_G1 <- MSEA(filteredTF,
+                filter(ligandModel, Group == 'Group1'), 
+                motifColumn = "TranscriptionFactor", 
+                ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                stat_column = 'logpval',
+                                        stat_threshold = 2, 
+                                       annotationName = 'CellType', annotation = "none", 
+                                       numCores = 60, verbose = FALSE) %>%
+                         mutate(Label = ifelse(adjp_val < 0.05, ligand, NA),
+                              Label2 = ifelse(p_val < 0.05, ligand, NA))
+               
+MSEA_G2 <- MSEA(filteredTF,
+                filter(ligandModel, Group == 'Group2'), 
+                motifColumn = "TranscriptionFactor", 
+                ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                stat_column = 'logpval',
+                                        stat_threshold = 2, 
+                                       annotationName = 'CellType', annotation = "none", 
+                                       numCores = 30, verbose = FALSE) %>%
+                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA),
+                              Label2 = ifelse(p_val < 0.05, ligand, NA))
+dplyr::filter(MSEA_G1, adjp_val < 0.05)
+                   
+write.csv(MSEA_G1, 'Fig5_Models_LigandMSEA_Group1.csv')
+write.csv(MSEA_G2, 'Fig5_Models_LigandMSEA_Group2.csv')                        
+ 
+pdf('Figure5_MSEA_by_Group.csv')
+ggplot(MSEA_G1, aes(y = -log10(adjp_val), x = PercInNicheNet, color = !is.na(Label), 
+       label = Label)) +   geom_label() +
+                   geom_point()     +
+                   theme_bw() 
+ggplot(MSEA_G2, 
+       aes(y = -log10(adjp_val), x = PercInNicheNet, color = !is.na(Label), label = Label)) + 
+                   geom_point()     + geom_label() +
+                   theme_bw()
+                   
+ggplot(MSEA_G1, aes(y = -log10(p_val), x = PercInNicheNet, color = !is.na(Label2), 
+       label = Label2)) +   geom_label() +
+                   geom_point()     +
+                   theme_bw() 
+ggplot(MSEA_G2, 
+       aes(y = -log10(p_val), x = PercInNicheNet, color = !is.na(Label2), label = Label2)) + 
+                   geom_point()     + geom_label() +
+                   theme_bw()
+
+dev.off()    
+                   
+### See if there is overlap
+# CD6, IL17A, IL17F, CALR (CALR unique to Group 1)
+lr_network <- readRDS('lr_network.rds')                   
+CALR <- filter(lr_network, from =='CALR') %>% dplyr::select(to) %>% unlist() %>% c(., 'CALR')
+IL17 <- filter(lr_network, grepl('IL17', from)) %>% dplyr::select(to) %>% unlist() %>% c(., c('Il17F', 'IL17A','IL17R'))
+CD6<- filter(lr_network, from =='CD6') %>% dplyr::select(to) %>% unlist() %>% c(., 'CD6')                   
+SigOlinks <- read.csv('Olink_SignificantSlopes.csv')
+SigOlinks$Binding = unlist(lapply(SigOlinks$Assay, function(x){
+                        
+                        filter(lr_network, from == x) %>% select(to) %>% unlist() %>%
+                        paste0(., collapse = "|")
+                        
+    }))
+## ALCAM - extravasation of monocytes, binds CD6 which is on T cells, will not be picked up on Olink
+# IL17B is not well characterized
+filter(SigOlinks, Assay %in% c(CALR))[,c(1:4)]
+filter(SigOlinks, Assay %in% c(CALR) | grepl(paste0(CALR,collapse="|") , Binding))[,c(1:4)]
+filter(SigOlinks, Assay %in% c(IL17) | grepl(paste0(IL17,collapse="|") , Binding))[,c(1:4)]
+filter(SigOlinks, Assay %in% c(CD6) | grepl(paste0(CD6,collapse="|") , Binding))[,c(1:4)]
+                   
+hclusters <- read.csv('cluster_heatmap.csv')
+                   
+lapply(unique(hclusters$Cluster), function(y){
+    
+        subClust <- filter(hclusters, Cluster == y)
+        subsetLModel <- filter(ligandModel, TF %in% subClust$TF)
+    
+    
+        m1 <- MSEA(filteredTF,
+                filter(subsetLModel, Group == 'Group1'), 
+                motifColumn = "TranscriptionFactor", 
+                ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                stat_column = 'logpval',
+                                        stat_threshold = 2, 
+                                       annotationName = 'CellType', annotation = "none", 
+                                       numCores = 55, verbose = FALSE) %>%
+                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA)) %>%
+                    mutate(Group = 'Group1')
+    
+        m2 <- MSEA(filteredTF,
+                filter(subsetLModel, Group == 'Group2'), 
+                motifColumn = "TranscriptionFactor", 
+                ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                stat_column = 'logpval',
+                                        stat_threshold = 2, 
+                                       annotationName = 'CellType', annotation = "none", 
+                                       numCores = 55, verbose = FALSE) %>%
+                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA)) %>%
+                    mutate(Group = 'Group2')
+    
+        rbind(m1, m2)
+    
+    })
+
 ###### Functions used. 
                         
 simplifiedORA <- function(database, foreground, background){
@@ -1724,7 +2124,7 @@ modelDeviations <- function(Obj, formula, type = 'z', numCores = 1){
     
 }
               
-findTrunk <- function(pathway, TreeStructure, IDMatrix){
+findTrunk <- function(pathway, TreeStructure, IDMatrix, exportTree = FALSE){
 
     specID <- IDMatrix[match(pathway,IDMatrix[,2]),1]
 
@@ -1735,16 +2135,24 @@ findTrunk <- function(pathway, TreeStructure, IDMatrix){
     }
 
     treeID <- TreeStructure[which(TreeStructure[,2] %in% specID)[1],]
+    descriptionTree = pathway
 
-    while(any(TreeStructure$V2 %in% treeID[,1])){
+    while(any(TreeStructure$V2 %in% treeID$V1)){
 
-        treeID <- TreeStructure[which(TreeStructure$V2 == treeID[,1])[1],]
-
+        treeID <- TreeStructure[which(TreeStructure$V2 %in% treeID$V1)[1],]
+        descriptionTree <- paste(descriptionTree,  
+                                 IDMatrix[match(treeID[,1],IDMatrix[,1])[1],2], sep = ", ")
 
     }
 
     TrunkDescription <- IDMatrix[match(treeID[,1],IDMatrix[,1]),2]
 
+
+    if(exportTree){
+    
+        return(descriptionTree)
+        
+    }
     return(TrunkDescription)
 
 }
