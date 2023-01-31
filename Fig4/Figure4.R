@@ -144,7 +144,25 @@ DAP_Reactome <- arrange(DAP_Reactome, SecondLevel, enrichmentRatio)
 DAP_Reactome$description = factor(DAP_Reactome$description, levels = unique(DAP_Reactome$description))
 
 write.csv(DAP_Reactome, 'SuppDataFile1_MOCHA_ReactomePathways.csv')
+                           
+                           
+PathAnnot = lapply(tmp1$description, function(y)
+                    unlist(lapply(y, 
+                             function(x) findTrunk(x, Hierarch, ReactID))))  %>% unlist()
 
+PathAnnot[grepl('external stimuli',PathAnnot)] = 'Cellular responses to stimuli'
+PathAnnot[grepl('Mitotic',PathAnnot)] = 'Cell Cycle'               PathAnnot[grepl('Diseases of signal transduction',PathAnnot)] = 'Disease'                            
+                                  
+PathAnnot2 = lapply(tmp2$description, function(y)
+                    unlist(lapply(y, 
+                             function(x) findTrunk(x, Hierarch, ReactID))))  %>% unlist()
+PathAnnot2[grepl('beta-catenin|CTNNB1',PathAnnot2)] = 'Disease'
+PathAnnot2[grepl('Rho',PathAnnot2)] = 'Metabolism'
+tmp2$TopLevel = PathAnnot2
+tmp1$TopLevel = PathAnnot                                  
+
+                                  
+                                  
 pdf('Fig3_b.pdf')
 
 ggplot(DAP_Reactome, aes(x = description,
@@ -310,7 +328,23 @@ altTSS <- altTSS %>% group_by(name) %>%
 
 write.csv(altTSS, 'AlternativeTSS_CD16s_EarlyInfection.csv')
 altTSS <- makeGRangesFromDataFrame(read.csv('AlternativeTSS_CD16s_EarlyInfection.csv'), keep.extra.columns = TRUE)
+                                  
+## Annotate with previous analyzed differential gene expression from COVID19 infection
 
+alterDEGs <- read.csv('covid_alteredDEGs.csv') %>% 
+            filter(P.value.6h < 0.05 | P.value.2h < 0.05 | P.value.10h < 0.05 |
+                   P.value.24h < 0.05)
+dim(alterDEGs)
+sum(unique(altTSS$name) %in% alterDEGs$Gene.Symbol01)
+                                  
+alterProtein <- read.csv('covid_alteredProtein.csv') %>% 
+            filter(P.value.6h < 0.05 | P.value < 0.05 | P.value.10h < 0.05 |
+                   P.value.24h < 0.05)
+dim(alterProtein)
+sum(unique(altTSS$name) %in% alterProtein$Gene.Symbol)
+ 
+sum(unique(altTSS$name) %in% c(alterProtein$Gene.Symbol,alterDEGs$Gene.Symbol01))
+#56 out of 283             
 
 ####### Pathway enrichment at altTSS genes
 
@@ -424,14 +458,17 @@ dev.off()
 
 
 ############### Let's run co-accessibility for just the Alternative TSS sites
-
+altTSS <- makeGRangesFromDataFrame(read.csv('AlternativeTSS_CD16s_EarlyInfection.csv'), keep.extra.columns = TRUE)
+daps <- makeGRangesFromDataFrame(read.csv('Fig4_AllDAPs_CD16s_EarlyInfection.csv'), 
+                                 keep.extra.columns = TRUE)
+allTSS <- makeGRangesFromDataFrame(read.csv('Fig4_AllTSS_CD16s_EarlyInfection.csv'), keep.extra.columns = TRUE)
                                   
 altTSSLinks <- getCoAccessibleLinks(STM, cellPopulation = 'CD16 Mono',
                                      regions = plyranges::filter(altTSS, FDR < 0.2), 
                                      chrChunks = 8,
                                     approximateTile = TRUE,
                                      numCores = 55)
-                                  
+STM <- readRDS('CD16_SampleTileObj.rds')                                  
 
 saveRDS(altTSSLinks , 'Links_AltTSS.rds') 
 altTSSLinks <- readRDS('Links_AltTSS.rds')
@@ -476,30 +513,33 @@ posList <- metadata(STM)$CISBP
 
 ## Run enrichment: AltTSS Network vs all TSS Network, DAPs vs nonDAPs
 
-enrich_df <- MotifEnrichment(altTSS_Network,backGround, posList, numCores = 55)
+enrich_df <- MotifEnrichment(altTSS_Network,backGround, posList)
                     
 write.csv(enrich_df, 'CD16_MotifEnrichment_AltTSS_v2.csv')
-                                                                           
-#old <- read.csv('CD16_MotifEnrichment_AltTSS.csv')
+
 
 enrich_df2 <- enrich_df  %>% 
-                dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.)),
-                                                mlog10FDR = -log10(FDR)) %>%
-                dplyr::mutate(label = ifelse(FDR < 0.05, TranscriptionFactor, NA))
+                dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.))) %>%
+                dplyr::mutate(label = ifelse(adjp_val < 0.05, TranscriptionFactor, NA))
 
+enrichDAP_df <- MotifEnrichment(filter(daps, FDR <= 0.2),filter(daps, FDR >= 0.2),
+                                posList) %>% 
+                dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.))) %>%
+                dplyr::mutate(label = ifelse(adjp_val < 0.05, TranscriptionFactor, NA))
+write.csv(enrichDAP_df, 'CD16_MotifEnrichment_All_DAPs.csv')
+                                  
+pdf('Fig5F.pdf')
 
-pdf('Fig4F.pdf')
-
-    ggplot(enrich_df2, aes(x = enrichment, y = -log10(FDR), label = label)) + 
+    ggplot(enrich_df2, aes(x = enrichment, y = mlog10Padj, label = label)) + 
         geom_point() + theme_bw() + 
     geom_text_repel(max.overlaps = Inf,show.legend = FALSE) + 
         ggtitle('Motif Enrichment at Alternative TSS for CD16 in Early Infection') +
         ylab('-Log of Adjusted P-Value')+ 
         xlab('Enrichment')
 
-    ggplot(enrichDAP_df2, aes(x = enrichment, y = -log10(adjp_val), label = label)) + 
+    ggplot(enrichDAP_df, aes(x = enrichment, y = mlog10Padj, label = label)) + 
         geom_point() + theme_bw() + 
-    geom_text_repel(max.overlaps = Inf,show.legend = FALSE) + 
+    geom_text_repel(max.overlaps = 80,show.legend = FALSE) + 
         ggtitle('Motif Enrichment at DAPs for CD16 in Early Infection') +
         ylab('-Log of Adjusted P-Value')+ 
         xlab('Enrichment')
