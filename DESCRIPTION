@@ -1,0 +1,21 @@
+Package: vignettesForMOCHA
+Title: Additonal Functions and Scripts for Reproducing the MOCHA Manuscript
+Version: 0.0.0.9000
+Authors@R: 
+    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: Folders labelled by figure number contain scripts for reproducing figures. All scripts require the installation of the packages MOCHA and vignettesForMOCHA (or sourcing of all files under R/ in this package directory).
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.1
+Imports:
+    MOCHA
+Suggests: 
+    TxDb.Hsapiens.UCSC.hg38.refGene,
+    org.Hs.eg.db,
+    BSgenome.Hsapiens.UCSC.hg19,
+    chromVAR,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
