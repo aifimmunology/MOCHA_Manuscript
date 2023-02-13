@@ -182,7 +182,7 @@ getROC<- function(cell){
     preds <- parallel::mclapply(cellQuants,
            function(x)
                     get_samplePredictions(x),
-                      mc.cores=8,
+                      mc.cores=15,
                                 mc.preschedule=F
            )
   
@@ -287,7 +287,37 @@ getROC<- function(cell){
                                     axis.text.x=element_text(size=20, angle=90))
     print(p)
     dev.off()
-                               
+              
+    #### CD16 is main Plot 
+    if(cell=='CD16 Mono'){
+        
+    pdf(paste('plots/Fig1D',cell,'_metrics.pdf',sep=''),
+        width=4,
+        height=6
+    )     
+
+    p <- ggplot(youden,
+           aes(x=Ncells,
+               y=value,
+               col=variable))+geom_point()+
+                               geom_line(linewidth=2)+
+                               ylim(c(0,1))+
+                               #facet_wrap(~variable)+
+            theme( axis.title.y = element_text(size=20),
+                    axis.title.x = element_text(size=20),
+                    strip.text.x = element_text(size=20),
+                    axis.text.x = element_text(size=17, angle=90),
+                    axis.text.y = element_text(size=17))+
+                  xlab('Cells Sampled') + ylab('Value')+
+                               theme_minimal()+
+                               theme(text=element_text(size=20),
+                                     legend.position='none',
+                                    axis.text.x=element_text(size=20, 
+                                                             angle=90))
+    print(p)
+    dev.off()
+        
+    }
     #############################################################################       
     final_results = youden[, c('Ncells','variable','value')]
     write.csv(final_results,
