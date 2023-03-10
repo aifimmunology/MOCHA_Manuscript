@@ -576,3 +576,53 @@ write.csv(intensity_dt,
 write.csv(cumul_res,
           file='zeroes_covid.csv')          
           
+break
+
+##### Save Peaksets with intensities 
+summarize_peak_intensities <- function(x){
+    
+        mochaPeaks = StringsToGRanges(total_res[[x]]$VennList[[1]])
+        macs2Peaks = StringsToGRanges(total_res[[x]]$VennList[[2]])
+        homerPeaks = StringsToGRanges(total_res[[x]]$VennList[[3]])
+    
+        fullPeakset <- MOCHA::StringsToGRanges(names(total_res[[x]]$All3Lambda))
+        fullPeakset$score <- total_res_filtered[[x]]$All3Lambda
+        fullPeakset$name = ''
+        
+        mocha_idx <-  queryHits(findOverlaps(fullPeakset, mochaPeaks))
+        macs2_idx <-  queryHits(findOverlaps(fullPeakset, macs2Peaks))    
+        homer_idx <-  queryHits(findOverlaps(fullPeakset, homerPeaks))  
+    
+        mocha_and_macs2 = intersect(mocha_idx, macs2_idx)
+        mocha_and_homer = intersect(mocha_idx, homer_idx)
+        macs2_and_homer = intersect(macs2_idx, homer_idx)
+        common = intersect(mocha_and_homer, mocha_and_macs2)
+        union_peaks = unique(c(mocha_idx, macs2_idx,homer_idx))
+        
+        fullPeakset$name[union_peaks] <- 'Common'
+    
+        fullPeakset$name[setdiff(homer_idx, mocha_and_macs2)]  <- 'HOMER_Unique'
+        fullPeakset$name[setdiff(mocha_idx, macs2_and_homer)]  <- 'MOCHA_Unique'    
+        fullPeakset$name[setdiff(macs2_idx, mocha_and_homer)]  <- 'MACS2_Unique'       
+    
+        fullPeakset$name[setdiff(mocha_and_macs2, common)]  <- 'MOCHA_MACS2'
+        fullPeakset$name[setdiff(mocha_and_homer, common)]  <- 'MOCHA_HOMER'    
+        fullPeakset$name[setdiff(macs2_and_homer, common)]  <- 'MACS2_HOMER'        
+
+        table(fullPeakset$name)
+    
+        
+    return(fullPeakset[fullPeakset$name!=''])
+}
+
+peak_intensities <- mclapply(1:3,
+       function(x)
+       summarize_peak_intensities(x),
+                         mc.cores=3
+       )
+
+
+lapply(1:3,
+       function(x)
+       plyranges::write_bed(peak_intensities[[x]], file=paste(cells[x],'intensities_covid.bed',sep='_'))
+       )

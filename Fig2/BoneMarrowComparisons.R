@@ -19,6 +19,7 @@ require(RaggedExperiment)
 source('../../theme.R')
 source('../helper_granges.R')
 source('../utils.R')
+require(parallel)
 
 homeDir = '/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow'
 setwd(homeDir)
@@ -245,7 +246,8 @@ extract_tiles <- function(i){
     ### missed lambda
     missedLambda= tsam[row.names(tsam) %in% macs2_homer_gr$tileID[mocha_missed_idx],]                  
     ### all three 
-    all3Lambda= tsam[row.names(tsam) %in% mocha_gr$tileID[common_all_three],]
+    all3Lambda= tsam
+    names(all3Lambda) = row.names(tsam)
      
     ################################################################
     ################################################################
@@ -259,9 +261,9 @@ extract_tiles <- function(i){
         CTCF=ctcf_res,
         Promoter = promoter_res,
         TileDistributions = distributions_tiles,
-        MOCHA_tiles <- mocha_gr$tileID,
-        MACS2_tiles <- macs2_gr$tileID,
-        Homer_tiles <- homer_gr$tileID,
+        MOCHA_tiles = mocha_gr$tileID,
+        MACS2_tiles = macs2_gr$tileID,
+        Homer_tiles = homer_gr$tileID,
         TileTypesUniqueMOCHA=mocha_unique_tileType,
                 TileTypesAllThree = common_three_tileType,
                 TileTypesMissedMOCHA=mocha_missed_tileType,
@@ -754,3 +756,47 @@ write.csv(intensity_dt,
 write.csv(rbind(tss, ctcf_res),
           file='tss_ctcf.csv')          
           
+##### Save Peaksets with intensities 
+summarize_peak_intensities <- function(x){
+    
+        mochaPeaks = StringsToGRanges(tileCountsPerMethod_list[[x]]$MOCHA_tiles)
+        macs2Peaks = StringsToGRanges(tileCountsPerMethod_list[[x]]$MACS2_tiles)
+        homerPeaks = StringsToGRanges(tileCountsPerMethod_list[[x]]$Homer_tiles)
+    
+        fullPeakset <- MOCHA::StringsToGRanges(names(tileCountsPerMethod_list[[x]]$All3Lambda))
+        fullPeakset$Score <- tileCountsPerMethod_list[[x]]$All3Lambda
+        fullPeakset$group = ''
+        
+        mocha_idx <-  queryHits(findOverlaps(fullPeakset, mochaPeaks))
+        macs2_idx <-  queryHits(findOverlaps(fullPeakset, macs2Peaks))    
+        homer_idx <-  queryHits(findOverlaps(fullPeakset, homerPeaks))  
+    
+        mocha_and_macs2 = intersect(mocha_idx, macs2_idx)
+        mocha_and_homer = intersect(mocha_idx, homer_idx)
+        macs2_and_homer = intersect(macs2_idx, homer_idx)
+        common = intersect(mocha_and_homer, mocha_and_macs2)
+        union_peaks = unique(c(mocha_idx, macs2_idx,homer_idx))
+        
+        fullPeakset$group[union_peaks] <- 'Common'
+    
+        fullPeakset$group[setdiff(homer_idx, mocha_and_macs2)]  <- 'HOMER_Unique'
+        fullPeakset$group[setdiff(mocha_idx, macs2_and_homer)]  <- 'MOCHA_Unique'    
+        fullPeakset$group[setdiff(macs2_idx, mocha_and_homer)]  <- 'MACS2_Unique'       
+    
+        fullPeakset$group[setdiff(mocha_and_macs2, common)]  <- 'MOCHA_MACS2'
+        fullPeakset$group[setdiff(mocha_and_homer, common)]  <- 'MOCHA_HOMER'    
+        fullPeakset$group[setdiff(macs2_and_homer, common)]  <- 'MACS2_HOMER'        
+
+        table(fullPeakset$group)
+    return(fullPeakset)
+}
+
+peak_intensities <- mclapply(1:3,
+       function(x)
+       summarize_peak_intensities(x),
+                         mc.cores=3
+       )
+
+
+intensities_all_cells <- do.call(c,peak_intensities)
+plyranges::write_bed(intensities_all_cells, file='bm_intensities_by_celltypes.bed')

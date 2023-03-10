@@ -606,8 +606,8 @@ summarize_celltypes <- function(i, numCores=10){
     missedLambda= rowMeans(tsam[row.names(tsam) %in% macs2_homer_gr$tileID[mocha_missed_idx],],
                            na.rm=T)
     ### all three 
-    all3Lambda= rowMeans(tsam[row.names(tsam) %in% mocha_gr$tileID[common_all_three],],
-                           na.rm=T)    
+    all3Lambda= rowMeans(tsam, na.rm=T)    
+
     ####################################################
     ####################################################    
     require(VennDiagram)
