@@ -14,6 +14,7 @@ require(data.table)
 require(ggplot2)
 require(MOCHA)
 library(ArchR)
+require(parallel)
 library(GenomicRanges)
 library(plyranges)
 require(GGally)
@@ -34,7 +35,7 @@ ArchRProj <- ArchR::loadArchRProject('/home/jupyter/FullCovid/')
 ## calling open tiles 
 metadf <- getCellColData(ArchRProj) 
 studySignal = median(metadf$nFrags)
-celltypes <- c('CD16 Mono', 'B naive','cDC2',
+celltypes <- c('B naive','cDC2',
                'NK_CD56bright', 'CD14 Mono','NK')
 ############################################################
 ############################################################
@@ -182,7 +183,7 @@ getROC<- function(cell){
     preds <- parallel::mclapply(cellQuants,
            function(x)
                     get_samplePredictions(x),
-                      mc.cores=15,
+                      mc.cores=20,
                                 mc.preschedule=F
            )
   
@@ -212,9 +213,46 @@ getROC<- function(cell){
                modnames = modnames.txt,
                dsids = modnames)
                                
-    
+    setwd('/home/jupyter/MOCHA_Manuscript/SuppFig2_ModelEval/')
+
     #############################################################################
     #############################################################################   
+    if(cell=='NK'){
+        
+       idx = which(cellQuants %in% c(500, 2000, 5000, 10000, 25000))
+        
+       subsetted_mat_list = mclapply(idx, 
+               function(x){
+                        df = data.table(
+                            pred = mat_list[[x]],
+                            Macs2_label= as.factor(labels[[x]]),
+                            Cells = cellQuants[x]
+                            )
+                        df = df[sample(nrow(df), min(nrow(df), 100000)),]
+               },
+                                     mc.cores=5
+               )
+        subsetted_mat = rbindlist(subsetted_mat_list)
+        
+        pdf('test.pdf', width=)
+        p= ggplot(subsetted_mat,
+               aes(x=pred,
+                   fill=Macs2_label))+geom_histogram(binwidth=0.05)+theme_minimal()+
+                   facet_wrap(~Cells, scale='free_y', ncol=2)+
+                    theme(text=element_text(size=12),
+                         legend.position='none')+
+                          xlab("MOCHA Prediction") + ylab('Distribution')
+                   
+        print(p)
+        dev.off()
+        
+        write.csv(subsetted_mat,
+                  file='NK_probabilities.csv')
+                               
+    #############################################################################
+    #############################################################################   
+                               
+                               
     setwd('/home/jupyter/MOCHA_Manuscript/Fig1/')
                         
     ## Generate an mscurve object that contains ROC and Precision-Recall curves
@@ -340,6 +378,8 @@ lapply(celltypes,
 library(pROC)
 require(PRROC)
 require(ROCR)
+                               
+                               
 probs_subset <- scMACS_peaks2[seq(1, 83, by=3)]
 probs_subset <- rbindlist(probs_subset)
 probs_subset <- probs_subset[,c('tileID','Prediction','numCells')]
