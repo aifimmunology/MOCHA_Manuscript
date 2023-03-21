@@ -21,8 +21,8 @@ cells = c('B naive', 'CD16 Mono','CD4 CTL TEM')
 ### set directory 
 homeDir = '/home/jupyter/MOCHA_Manuscript/Fig2/'
 setwd(homeDir)
-ctcf <- plyranges::read_bed('All_Blood_CTCF_Sites.bed')
-load('tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('All_Blood_CTCF_hg38.bed')
+load('TSS_HG38.RDS')
 
 source('../theme.R')
 source('helper_granges.R')
@@ -56,10 +56,6 @@ cells_per_sample$CellSubsets = factor(cells_per_sample$CellSubsets,
                                       levels=cell_levels)
 
 cells_early_visit <- cells_per_sample[Sample %in% colnames(tileResults[[1]])]
-
-
-
-
 
 sizeText = 17
 lwd=2
@@ -223,7 +219,7 @@ ggplot(cumul_res[Metric == 'TSS'],
               axis.text.y = element_text(size=16),
              strip.background = element_blank(),
              strip.text=element_text(size=0),
-             legend.position='none')+ylim(4000,25000)+
+             legend.position='none')+ylim(4000,20000)+
         scale_col_MOCHA()
 
 dev.off()

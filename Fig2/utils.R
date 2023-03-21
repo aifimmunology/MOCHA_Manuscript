@@ -521,9 +521,9 @@ summarize_celltypes <- function(i, numCores=10){
     ##############################################################
     ### TSS Per method 
 
-    mocha_tss <- subsetByOverlaps(mocha_population, new_tss)
-    macs2_tss <- subsetByOverlaps(macs2_population, new_tss)
-    homer_tss <- subsetByOverlaps(homer_population, new_tss)
+    mocha_tss <- subsetByOverlaps(mocha_population, tss_hg38)
+    macs2_tss <- subsetByOverlaps(macs2_population, tss_hg38)
+    homer_tss <- subsetByOverlaps(homer_population, tss_hg38)
 
     mocha_tss_zeroes <- mocha_zeroes[names(mocha_zeroes) %in% mocha_tss$tileID]
     macs2_tss_zeroes <- macs2_zeroes[names(macs2_zeroes) %in% macs2_tss$tileID]

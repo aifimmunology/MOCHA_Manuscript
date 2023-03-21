@@ -30,17 +30,19 @@ setwd(homeDir)
 cells <- c('10_cDC','20_CD4.N1','12_CD14.Mono.2')
 cell_dirs <-  dir('Macs2/')
 cell_dirs = cell_dirs[c(1,4,2)]
+
+
 ## Load CTCF & TSS Datasets
-ctcf <- plyranges::read_bed('../All_Blood_CTCF_Sites.bed')
-load('../tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('../All_Blood_CTCF_hg19.bed')
+load('../TSS_HG19.RDS')
 
 ## load ArchR project
 ArchRProj = loadArchRProject('/home/jupyter/DoubletFreeBoneMarrow')
 metadata = as.data.table(ArchRProj@cellColData)
 
 ### load databases 
-BiocManager::install('BSgenome.Hsapiens.UCSC.hg19') 
-remotes::install_github("wcstcyx/TxDb.Hsapiens.UCSC.hg19.refGene")
+#BiocManager::install('BSgenome.Hsapiens.UCSC.hg19') 
+#remotes::install_github("wcstcyx/TxDb.Hsapiens.UCSC.hg19.refGene")
 
 library(BSgenome.Hsapiens.UCSC.hg19)
 library(TxDb.Hsapiens.UCSC.hg19.refGene)
@@ -129,7 +131,16 @@ extract_tiles <- function(i){
                                   
     ################################################################
     ################################################################
-    ### Panel B: Covid-19
+    
+    ### convert objects to Granges
+    mocha_gr <- makeGRangesFromDataFrame(MOCHA_tileList[[1]], 
+                                         keep.extra.columns=T)
+    
+    macs2_gr <- makeGRangesFromDataFrame(macs2_tile_list2, 
+                                         keep.extra.columns=T)
+    
+    homer_gr <- makeGRangesFromDataFrame(homer_peak_list2, 
+                                         keep.extra.columns=T)    
 
     N =  ncol(sampleTileMatrix)
 
@@ -145,17 +156,10 @@ extract_tiles <- function(i){
     
     ## In this section we run the 
     ## CTCF Chip-Seq data base hits 
-
-    find_ctcf_overlaps <- function(ctcf, peakset){
-            peakset_gr <- makeGRangesFromDataFrame(peakset)
-            tmp <- findOverlaps(ctcf, peakset_gr)
-            return(length(unique(tmp@from)))
-    }
-    
     ctcf_res = data.frame(
-              MOCHA= find_ctcf_overlaps(ctcf, MOCHA_tileList[[1]]),
-              MACS2= find_ctcf_overlaps(ctcf, macs2_tile_list2),
-              HOMER= find_ctcf_overlaps(ctcf, homer_peak_list2)
+              MOCHA= length(subsetByOverlaps(mocha_gr, ctcf,)),
+              MACS2= length(subsetByOverlaps(macs2_gr, ctcf)),
+              HOMER= length(subsetByOverlaps(homer_gr, ctcf))
         )
     ctcf_res$CellPopulation <- cells[i]   
     ctcf_res = melt(ctcf_res)       
@@ -165,20 +169,11 @@ extract_tiles <- function(i){
         
     ### to calculate tss overlap 
 
-    find_tss_overlaps <- function(new_tss, peakset){
-        peakset_gr <- makeGRangesFromDataFrame(peakset)
-        overlaps_tss <- findOverlaps(new_tss, peakset_gr)
-
-        overlapping_tss <- new_tss[overlaps_tss@from, ]
-        unique_tss <- length(unique(overlapping_tss$gene_name))
-
-        return(unique_tss)
-    }
-
     ### Avg Peakset  
-    tss_res = data.table(MOCHA=find_tss_overlaps(new_tss, MOCHA_tileList[[1]]),
-                          MACS2=find_tss_overlaps(new_tss, macs2_tile_list2),
-                          HOMER=find_tss_overlaps(new_tss, homer_peak_list2))
+    tss_res = data.table(MOCHA=  length(subsetByOverlaps(mocha_gr, tss_hg19)),
+                          MACS2= length(subsetByOverlaps(macs2_gr, tss_hg19 )),
+                          HOMER= length(subsetByOverlaps(homer_gr,tss_hg19))
+                                        )
     
     tss_res$CellPopulation <- cells[i]   
     tss_res = melt(tss_res)
@@ -634,7 +629,7 @@ lapply(1:3, function(x) draw_pie(x)
 
 ################################################################           
 ################################################################
-
+break
 # pie charts 
 
 # pie charts 
@@ -764,8 +759,8 @@ summarize_peak_intensities <- function(x){
         homerPeaks = StringsToGRanges(tileCountsPerMethod_list[[x]]$Homer_tiles)
     
         fullPeakset <- MOCHA::StringsToGRanges(names(tileCountsPerMethod_list[[x]]$All3Lambda))
-        fullPeakset$Score <- tileCountsPerMethod_list[[x]]$All3Lambda
-        fullPeakset$group = ''
+        fullPeakset$score <- tileCountsPerMethod_list[[x]]$All3Lambda
+        fullPeakset$name = ''
         
         mocha_idx <-  queryHits(findOverlaps(fullPeakset, mochaPeaks))
         macs2_idx <-  queryHits(findOverlaps(fullPeakset, macs2Peaks))    
@@ -777,18 +772,18 @@ summarize_peak_intensities <- function(x){
         common = intersect(mocha_and_homer, mocha_and_macs2)
         union_peaks = unique(c(mocha_idx, macs2_idx,homer_idx))
         
-        fullPeakset$group[union_peaks] <- 'Common'
+        fullPeakset$name[union_peaks] <- 'Common'
     
-        fullPeakset$group[setdiff(homer_idx, mocha_and_macs2)]  <- 'HOMER_Unique'
-        fullPeakset$group[setdiff(mocha_idx, macs2_and_homer)]  <- 'MOCHA_Unique'    
-        fullPeakset$group[setdiff(macs2_idx, mocha_and_homer)]  <- 'MACS2_Unique'       
+        fullPeakset$name[setdiff(homer_idx, mocha_and_macs2)]  <- 'HOMER_Unique'
+        fullPeakset$name[setdiff(mocha_idx, macs2_and_homer)]  <- 'MOCHA_Unique'    
+        fullPeakset$name[setdiff(macs2_idx, mocha_and_homer)]  <- 'MACS2_Unique'       
     
-        fullPeakset$group[setdiff(mocha_and_macs2, common)]  <- 'MOCHA_MACS2'
-        fullPeakset$group[setdiff(mocha_and_homer, common)]  <- 'MOCHA_HOMER'    
-        fullPeakset$group[setdiff(macs2_and_homer, common)]  <- 'MACS2_HOMER'        
+        fullPeakset$name[setdiff(mocha_and_macs2, common)]  <- 'MOCHA_MACS2'
+        fullPeakset$name[setdiff(mocha_and_homer, common)]  <- 'MOCHA_HOMER'    
+        fullPeakset$name[setdiff(macs2_and_homer, common)]  <- 'MACS2_HOMER'        
 
-        table(fullPeakset$group)
-    return(fullPeakset)
+        table(fullPeakset$name)
+        return(fullPeakset[fullPeakset$name!=''])
 }
 
 peak_intensities <- mclapply(1:3,
@@ -798,5 +793,8 @@ peak_intensities <- mclapply(1:3,
        )
 
 
-intensities_all_cells <- do.call(c,peak_intensities)
-plyranges::write_bed(intensities_all_cells, file='bm_intensities_by_celltypes.bed')
+
+lapply(1:3,
+       function(x)
+       plyranges::write_bed(peak_intensities[[x]], file=paste(cells[x],'intensities_bm.bed',sep='_'))
+       )

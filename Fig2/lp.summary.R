@@ -21,8 +21,8 @@ cells = c('B naive', 'CD16 Mono','CD8 TEM')
 ### set directory 
 homeDir = '/home/jupyter/MOCHA_Manuscript/Fig2/'
 setwd(homeDir)
-ctcf <- plyranges::read_bed('All_Blood_CTCF_Sites.bed')
-load('tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('All_Blood_CTCF_hg38.bed')
+load('TSS_HG38.RDS')
 
 source('../theme.R')
 source('helper_granges.R')
@@ -111,8 +111,6 @@ ggplot(tiles,
 
 dev.off()
 
-
-
 summarized_tiles = tiles[, median(value), by=list(variable, CellPop)]
 
 ## range of num peaks 
@@ -146,21 +144,6 @@ a = rbindlist(lapply(c(1:3),
                      )
        ))
           
-
-
-# png('TileCounts_h.png', width=600, height=250)
-# ggplot(tiles,
-#        aes(x=reorder(variable, value, median),
-#            y=value,
-#           fill=variable))+geom_violin(scale='width')+
-#         scale_fill_MOCHA()+
-#         facet_wrap(~CellPop, ncol=3)+
-#     theme_minimal()+ylab('Tiles')+xlab('')+
-#     theme(legend.position='none',
-#           text=element_text(size=14))
-          
-
-# dev.off()
 ################################################################
 ################################################################
 ### plot tiles per 
@@ -232,7 +215,7 @@ ggplot(cumul_res[Metric == 'TSS'],
               axis.text.y = element_blank(),
              strip.background = element_blank(),
              strip.text=element_text(size=0),
-             legend.position='none')+ylim(4000,25000)+
+             legend.position='none')+ylim(4000,20000)+
         scale_col_MOCHA()
 
 
@@ -288,37 +271,6 @@ hist_res$Cell = factor(hist_res$Cell,
 hist_res$Metric <- factor(hist_res$Metric,
                            levels=metric_levels)
 
-# png('HistResults.png',
-#    width=600,
-#    height=600)
-# ggplot(hist_res[Metric !='Promoter'],
-#        aes(x=values,
-#            col=model))+
-#             geom_density(linewidth=2)+
-#         facet_wrap(Cell ~ Metric, scales='free_y')+
-#         theme_classic()+
-#         theme(axis.text.x = element_text(size=10, angle=90),
-#              strip.background = element_blank(),
-#              strip.text=element_text(size=0),
-#              legend.position='none')
-# dev.off()
-
-### generate violin showing
-# ### each sample's cellular 
-# ### abundance for each cell type
-# png('lp_cellsCounts_subject_h.png', height=3, units='in',width=6, res=600)
-#     ggplot(cells_per_sample[CellSubsets !='CD14 Mono'],
-#        aes(y=CellSubsets,
-#            x=Count))+geom_bar(linewidth=1.25)+ ThemeMain+
-#             xlab('# Cells')+ylab('Population')+
-#             scale_x_continuous(trans='log10')+  theme_minimal()+
-#             theme(legend.position='none',
-#                  axis.text.y=element_text(size=14),
-#                  axis.text.x=element_text(size=14, angle=90),
-#                  title=element_text(size=20))
-   
-   
-# dev.off()
 
 ### generate violin showing
 ### each sample's cellular 
@@ -542,42 +494,6 @@ draw_pie <- function(x){
 
 lapply(1:3, function(x) draw_pie(x)
        )
-
-################################################################           
-################################################################
-
-# pie charts 
-
-tileTypes_mocha_unique <- lapply(1:3,
-                 function(x)
-                     cbind(total_res[[x]]$TileTypesUniqueMOCHA,
-                           cells[x])
-                                 )
-                 
-    
-    
-
-tileTypes_mocha_missed <- lapply(1:3,
-                 function(x)
-                    cbind(total_res[[x]]$TileTypesMissedMOCHA,
-                           cells[x])
-                                     )
-    
-tileTypes_allThree <- lapply(1:3,
-                 function(x)
-                      cbind(total_res[[x]]$TileTypesAllThree,
-                           cells[x])
-                                     
-                 )
-    
-mocha_unique[tileType=='Promoter', range(percentage),]
-mocha_missed[tileType=='Promoter', range(percentage),]
-allThree[tileType=='Promoter', range(percentage),]
-
-
-mocha_unique[tileType=='Promoter', range(value),]
-mocha_missed[tileType=='Promoter', range(value),]
-allThree[tileType=='Promoter', range(value),]
 
 
 ################################################################           
