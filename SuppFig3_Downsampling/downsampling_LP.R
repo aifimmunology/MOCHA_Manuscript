@@ -4,6 +4,7 @@
 require(MOCHA)
 #require(scMACS)
 require(ggpubr)
+require(parallel)
 require(data.table)
 require(ggplot2)
 require(ArchR)
@@ -22,15 +23,14 @@ setwd(homeDir)
 ### Load MOCHA tiles,
 ### TSS and
 ### CTCF 
-ctcf <- plyranges::read_bed('All_Blood_CTCF_Sites.bed')
-load('tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('All_Blood_CTCF_hg38.bed')
+load('TSS_HG38.RDS')
 tileResults <- readRDS('LongPilot/MOCHA.RDS')
 
 ### Load Helper Functions 
 source('../theme.R')
 source('helper_granges.R')
 source('utils.R')
-
 
 ## load ArchR project
 ArchRProj = loadArchRProject('/home/jupyter/longPilot')
@@ -231,19 +231,19 @@ summarize_cell <- function(cell){
         
     mocha_tss = mclapply(tile_list2,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )
 
     macs2_tss = mclapply(macs2_tile_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )
     
     homer_tss = mclapply(homer_peak_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )   
     
@@ -290,7 +290,7 @@ results_tiles <- rbindlist(lapply(results_list,
                             x$Tiles
                         ))
 
-setwd('/home/jupyter/MOCHA_Manuscript/SuppForFig2')
+setwd('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling')
 
 a = ggplot(results_tiles,
        aes(x=CellCounts,
@@ -342,3 +342,13 @@ ggsave('lp_downsampling.pdf', height=9, width=9)
        
                
 saveRDS(results_list, file='lp_results.RDS')
+
+
+######
+### write results 
+results_tss$Type = 'TSS'
+results_ctcf$Type = 'CTCF'
+results_tiles$Type ='Tiles'
+
+write.csv(rbind(results_tss, results_ctcf, results_tiles),
+          file='results_healthyDonors.csv')

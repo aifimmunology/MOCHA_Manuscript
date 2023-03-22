@@ -2,7 +2,7 @@
 
 ## load libraries 
 require(MOCHA)
-#require(scMACS)
+require(parallel)
 require(ggpubr)
 require(data.table)
 require(ggplot2)
@@ -22,8 +22,9 @@ setwd(homeDir)
 ### Load MOCHA tiles,
 ### TSS and
 ### CTCF 
-ctcf <- plyranges::read_bed('All_Blood_CTCF_Sites.bed')
-load('tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('All_Blood_CTCF_hg38.bed')
+load('TSS_HG38.RDS')
+
 tileResults <- readRDS('Covid-19/MOCHA.RDS')
 
 ### Load Helper Functions 
@@ -31,13 +32,11 @@ source('../theme.R')
 source('helper_granges.R')
 source('utils.R')
 
-
 ## load ArchR project
 ArchRProj = loadArchRProject('/home/jupyter/FullCovid')
 metadata = as.data.table(ArchRProj@cellColData)
 
 summarize_cell <- function(cell){
-    
     
     #####################################################################
     ### Load MOCHA tiles
@@ -230,19 +229,19 @@ summarize_cell <- function(cell){
         
     mocha_tss = mclapply(tile_list2,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )
 
     macs2_tss = mclapply(macs2_tile_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )
     
     homer_tss = mclapply(homer_peak_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg38),
                           mc.cores=10
                           )   
     
@@ -283,19 +282,13 @@ results_list <- lapply(cells,
                        function(x) summarize_cell(x)
                        )
 
-setwd('MOCHA_Manuscript/SuppForFig2')
-source('../../theme.R')
-source('../Fig2/helper_granges.R')
-source('../Fig2/utils.R')
-results_list = readRDS('covid_results.RDS')
-
 ### get tile counts 
 results_tiles <- rbindlist(lapply(results_list,
                         function(x)
                             x$Tiles
                         ))
 
-setwd('/home/jupyter/MOCHA_Manuscript/SuppForFig2')
+setwd('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling')
 
 a = ggplot(results_tiles,
        aes(x=CellCounts,
@@ -350,3 +343,11 @@ ggsave(file='covid_downsampling.pdf')
        
                         
 saveRDS(results_list, file='covid_results.RDS')
+
+### write results 
+results_tss$Type = 'TSS'
+results_ctcf$Type = 'CTCF'
+results_tiles$Type ='Tiles'
+
+write.csv(rbind(results_tss, results_ctcf, results_tiles),
+          file='results_covid.csv')

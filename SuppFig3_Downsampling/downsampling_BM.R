@@ -2,13 +2,18 @@
 
 ## load libraries 
 require(MOCHA)
-#require(scMACS)
+require(parallel)
 require(ggpubr)
 require(data.table)
 require(ggplot2)
 require(ArchR)
 require(MultiAssayExperiment)
 require(RaggedExperiment)
+
+library(BSgenome.Hsapiens.UCSC.hg19)
+library(TxDb.Hsapiens.UCSC.hg19.refGene)
+
+library(org.Hs.eg.db)
 
 # # Identify Cell populations
 # # to analyze 
@@ -22,8 +27,8 @@ setwd(homeDir)
 ### Load MOCHA tiles,
 ### TSS and
 ### CTCF 
-ctcf <- plyranges::read_bed('All_Blood_CTCF_Sites.bed')
-load('tss_reorganized.RDS')
+ctcf <- plyranges::read_bed('All_Blood_CTCF_hg19.bed')
+load('TSS_HG19.RDS')
 tileResults <- readRDS('BoneMarrow/MOCHA.RDS')
 
 ### Load Helper Functions 
@@ -231,19 +236,19 @@ summarize_cell <- function(cell){
         
     mocha_tss = mclapply(tile_list2,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg19),
                           mc.cores=ncores
                           )
 
     macs2_tss = mclapply(macs2_tile_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg19),
                           mc.cores=ncores
                           )
     
     homer_tss = mclapply(homer_peak_list3,
                           function(x)
-                              count_overlaps(x, new_tss),
+                              count_overlaps(x, tss_hg19),
                           mc.cores=ncores
                           )   
     
@@ -284,13 +289,14 @@ results_list <- lapply(cells,
                        function(x) summarize_cell(x)
                        )
 
+
 ### get tile counts 
 results_tiles <- rbindlist(lapply(results_list,
                         function(x)
                             x$Tiles
                         ))
 
-setwd('/home/jupyter/MOCHA_Manuscript/SuppForFig2')
+setwd('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling')
 
 a = ggplot(results_tiles,
        aes(x=CellCounts,
@@ -299,7 +305,6 @@ a = ggplot(results_tiles,
             geom_line()+
         theme_minimal()+
     facet_wrap(~Cell, ncol=3, scales='free')
-Cell, ncol=3)+ylab('Tiles')
 
 ### get CTCF counts 
 results_ctcf <- rbindlist(lapply(results_list,
@@ -342,3 +347,11 @@ ggsave('bm_downsampling.pdf', height=9, width=9)
 
 
 saveRDS(results_list, file='bm_results.RDS')
+
+### write results 
+results_tss$Type = 'TSS'
+results_ctcf$Type = 'CTCF'
+results_tiles$Type ='Tiles'
+
+write.csv(rbind(results_tss, results_ctcf, results_tiles),
+          file='results_boneMarrow.csv')
