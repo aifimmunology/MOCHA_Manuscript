@@ -3,6 +3,7 @@ require(ArchR)
 require(MOCHA)
 require(plyranges)
 require(parallel)
+require(data.table)
 source('/home/jupyter/theme.R')
 
 setwd('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling')
@@ -12,26 +13,58 @@ lp <- ArchR::loadArchRProject('/home/jupyter/longPilot')
 bm <- ArchR::loadArchRProject('/home/jupyter/DoubletFreeBoneMarrow/')
 cov <- ArchR::loadArchRProject('/home/jupyter/FullCovid')
 
-### Get BM Altius peakset Overlap
 
+
+### Get Covid Altius peakset Overlap
+### clear memory first
 cl = parallel::makeCluster(50)
 parallel::clusterEvalQ(cl, {library(ArchR)})
 parallel::clusterEvalQ(cl, {library(rhdf5)})
+cov_meta = as.data.table(cov@cellColData)
+ctypes_names = unique(cov_meta$new_cellType)
+
+
+### Run cell type by cell type 
+### to avoid memory issues with 
+### loading all 1.4 million cells 
+cov_altius <- lapply(ctypes_names,
+       function(x){
+           
+           tmp_frags =  MOCHA::getPopFrags(cov, 
+                                 cellPopLabel = "predictedGroup_Co2", 
+                                 cellSubsets = x, 
+                                 numCores = cl,
+                                 poolSamples = TRUE,  
+                                 verbose = TRUE)
+
+            sum(countOverlaps(tmp_frags[[1]], hg38_altius)>0) / length(tmp_frags[[1]])}
+                      )
+stopCluster(cl)
+covid_altius_summary <- unlist(cov_altius)
+
+
+### Get BM Altius peakset Overlap
+cl = parallel::makeCluster(50)
+parallel::clusterEvalQ(cl, {library(ArchR)})
+parallel::clusterEvalQ(cl, {library(rhdf5)})
+bm_meta = as.data.table(bm@cellColData)
+ctypes_names = unique(bm_meta$new_cellType)
 
 frags_bm <-  MOCHA:::getPopFrags(bm, 
-                                 metaColumn = "predictedGroup", 
-                         cellSubsets = NULL, 
-                         region = NULL,
-                         numCores = cl,
-                         blackList = NULL,
-                         verbose = TRUE,
-                         overlapList = 50
-      )
+                                 cellPopLabel = "predictedGroup", 
+                                 cellSubsets = NULL, 
+                                 numCores = cl,
+                                 poolSamples = TRUE,
+                                 verbose = TRUE)
+ 
 
-bm_altius <- mclapply(frags_bm,
-       function(x)
-    sum(countOverlaps(x, hg19_altius)>0) / length(x),
-       mc.cores=10
+bm_altius <- mclapply(ctypes_names,
+       function(x){
+           idx = grep(x, names(frags_bm))
+           tmpFrags = IRanges::stack(frags_bm[idx])
+           sum(countOverlaps(tmpFrags, hg19_altius)>0) / length(tmpFrags)
+    },
+                      mc.cores=10
                       )
 rm(frags_bm)
 gc()
@@ -39,67 +72,38 @@ pryr::mem_used()
 bm_altius_summary <- unlist(bm_altius)
 
 ### Get Long Pilot Altius peakset Overlap
-cl = parallel::makeCluster(20)
+cl = parallel::makeCluster(50)
 parallel::clusterEvalQ(cl, {library(ArchR)})
 parallel::clusterEvalQ(cl, {library(rhdf5)})
 
-frags_lp <- MOCHA:::getPopFrags(
-          ArchRProj = lp,
-          metaColumn = 'predictedCell_Col2.5',
-          cellSubsets = NULL,
-          region = NULL,
-          numCores = cl,
-          blackList = NULL,
-          verbose = TRUE,
-          overlapList = 50
-      )
+
+frags_lp <- MOCHA:::getPopFrags( ArchRProj = lp,
+                                 cellPopLabel='predictedGroup_Col2.5',
+                                 cellSubsets = NULL, 
+                                 numCores = cl,
+                                 poolSamples = TRUE,
+                                 verbose = TRUE)
 stopCluster(cl)
 
-frags_lp <-  MOCHA::getPopFrags(lp, 
-                                 metaColumn = "predictedCell_Col2.5", 
-                         numCores= 30)
+lp_meta = as.data.table(lp@cellColData)
+ctypes_names = unique(lp_meta$predictedGroup_Col2.5)
 
-
-lp_altius <- mclapply(frags_lp,
-       function(x)
-    sum(countOverlaps(x, hg38_altius)>0) / length(x),
-       mc.cores=10
+lp_altius <- mclapply(ctypes_names,
+       function(x){
+           idx = grep(x, names(frags_lp))
+           tmpFrags = IRanges::stack(frags_lp[idx])
+           sum(countOverlaps(tmpFrags, hg38_altius)>0) / length(tmpFrags)
+    },
+                      mc.cores=10
                       )
+
 rm(frags_lp)
 
 lp_altius_summary <- unlist(lp_altius)
 pryr::mem_used()
 
 
-### Get Covid Altius peakset Overlap
-### clear memory first
-cl = parallel::makeCluster(20)
-parallel::clusterEvalQ(cl, {library(ArchR)
-                            library(rhdf5) })
-
-
-frags_covid <-  MOCHA::getPopFrags(cov, 
-                                 metaColumn = "predictedGroup_Co2", 
-                                 cellSubsets = NULL, 
-                                 region = NULL,
-                                 numCores = cl,
-                                 sampleSpecific = T,
-                                 NormMethod = "nfrags",
-                                 blackList = NULL,
-                                 verbose = TRUE,
-                                 overlapList = 50
-      )
-
-cov_altius <- mclapply(frags_covid,
-       function(x)
-    sum(countOverlaps(x, hg38_altius)>0) / length(x),
-       mc.cores=10
-                      )
-
-
-covid_altius_summary <- unlist(cov_altius)
-
-df = data.frame(FRIA = c(bm_altius_summary, 
+df = data.table(FRIA = c(bm_altius_summary, 
                   lp_altius_summary,
                   covid_altius_summary),
                 Dataset=c(rep('Bone Marrow', length(bm_altius_summary)),
@@ -111,7 +115,11 @@ df$Dataset <- factor(df$Dataset, levels=c('COVID-19',
                                           'Healthy Donors',
                                           'Bone Marrow'))
 
-pdf('/home/jupyter/MOCHA_Manuscript/Fig2/altius.pdf',
+write.csv(df,
+          file='/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/FRIA.csv'
+          )
+
+pdf('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/altius.pdf',
     width=8,
     height=6)
 ggplot(df,
@@ -142,7 +150,7 @@ df_frags$Dataset <- factor(df_frags$Dataset, levels=c('COVID-19',
                                           'Healthy Donors',
                                           'Bone Marrow'))
 
-pdf('/home/jupyter/MOCHA_Manuscript/Fig2/nfrags.pdf',
+pdf('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/nfrags.pdf',
     width=8,
     height=6)
 ggplot(df_frags,
@@ -155,7 +163,7 @@ ggplot(df_frags,
 ggpubr::stat_compare_means()
 dev.off()
 
-pdf('/home/jupyter/MOCHA_Manuscript/Fig2/nfrags2.pdf',
+pdf('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/nfrags2.pdf',
     width=8,
     height=6)
 ggplot(df_frags,
