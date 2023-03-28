@@ -67,6 +67,17 @@ saveArchRProject(CD16s)
 metadata1 <- getCellColData(CD16s) %>% as.data.frame() %>%
                 dplyr::left_join(as.data.frame(colData(SampleTileObj))[,c('Sample','DaysPSO')], by = 'Sample')
 
+umap1 <- getEmbedding(CD16s, embedding = 'Time_UMAP', returnDF = TRUE)
+
+rawMeta <-   as.data.frame(getCellColData(CD16s, c('InfectionStages', 'Trajectory'))) %>% 
+                 dplyr::mutate(Cells = rownames(.)) 
+                           
+UMAP_df <- getEmbedding(CD16s, embedding = 'Time_UMAP', returnDF = TRUE) %>%
+    dplyr::mutate(Cells = rownames(.)) %>% dplyr::full_join(rawMeta, by = 'Cells')
+
+write.csv(UMAP_df, 'TSAM_based_UMAP.csv')
+
+  
 
 CD16s <- addCellColData(CD16s, data = metadata1$DaysPSO, name = "DaysPSO", 
                         cells = getCellNames(CD16s), force= TRUE)
@@ -328,187 +339,10 @@ ggplot(pieChartSummary, aes(x= '', y = PathwayType, fill = Level2)) +
 treemap(pieChartSummary, index = "Level2", vSize = "PathwayType", type = "index", palette = "Dark2",
          inflate.labels = T)
                              
-dev.off()
-
-                                
-#########################################################
-### lets do upset plots to compare
-                             
-pathwayHits <- read.csv('covid_pathway_hits_annotated.csv')
-
-                                
-library(UpSetR)
-                        
-upsetInput <- list('MOCHA: Zero-inflated Modeling' = pathwayHits$description,
-                'Monocle3: GeneScore Pseudotime' = dplyr::filter(trajPathways, 
-                                                Trajectory == 'GeneScore')$description,
-                'Monocle3: Promoter Tile Pseudotime' = dplyr::filter(trajPathways, 
-                                                Trajectory == 'PromoterTiles')$description )
-             
-##Calculate the percent overlap with any other method
-    
-pathwayRep <- data.frame(Approach = names(upsetInput),
-                         Reproducibility = c(
-                         sum(upsetInput[[1]] %in% unlist(upsetInput[-1]))/length(upsetInput[[1]]),
-                         sum(upsetInput[[2]] %in% unlist(upsetInput[-2]))/length(upsetInput[[2]]),
-                         sum(upsetInput[[3]] %in% unlist(upsetInput[-3]))/length(upsetInput[[3]])))                   
-
-                             
-pdf('Figure5_TrajectoryComparison.pdf')
-                                
-UpSetR::upset(fromList(upsetInput), order.by = "freq", sets.bar.color=c("blue","red", "green"),
-            main.bar.color = c("blue","purple","red", "green", 'black', "yellow3", "cyan") )
-
-ggplot(pathwayRep, aes(y =  Reproducibility, x = Approach, fill = Approach)) + geom_col()    +
-            theme_bw() + ylim(0,1) 
-dev.off()                  
-                                
-                                
-#### Let's do a quick comparison to test whether the overlap is more correlated with true time than the trajectory unique. 
-                             
-peakMatrix <- getMatrixFromProject(CD16s, 'PeakMatrix')
-peakMat <- assays(peakMatrix)[[1]]
-rownames(peakMat) <- MOCHA::GRangesToString(getPeakSet(CD16s))
+dev.off()               
                   
-modelingGenes <- unlist(stringr::str_split(paste(pathwayHits$userId, sep = ";"), ";")) %>% unique() 
-promoGenes <- unlist(stringr::str_split(paste(dplyr::filter(trajPathways, 
-                        Trajectory == 'PromoterTiles')$userId, sep = ";"), ";")) %>% unique() 
-overlapGenes <- promoGenes[promoGenes %in% modelingGenes]
-                             
-trajTilesOverlap <- trajTiles[grepl(paste(overlapGenes, collapse = "|"), trajTiles$Gene)]
-                             
-
-NonoverlapGenes <- promoGenes[!promoGenes %in% modelingGenes]
-                      
-trajTilesNonOverlap <- trajTiles[grepl(paste(NonoverlapGenes, collapse = "|"), trajTiles$Gene) &
-                                !grepl(paste(overlapGenes, collapse = "|"), trajTiles$Gene)]
-trajTilesNonOverlap <- trajTiles[(grepl(paste(NonoverlapGenes[c(1:1600)], collapse="|"), trajTiles$Gene) |
-                                  grepl(paste(NonoverlapGenes[c(1601:3197)], collapse="|"), trajTiles$Gene)) &
-                                 !grepl(overlapGenes, trajTiles$Gene]
-                                        
-nonoverlapMat <- peakMat[rownames(peakMat) %in% MOCHA::GRangesToString(trajTilesNonOverlap),]
-overlapMat <- peakMat[rownames(peakMat) %in% MOCHA::GRangesToString(trajTilesOverlap),]
-
-
-## Test relationship to time
-timeDf <- data.frame(Cells = colnames(nonoverlapMat),
-                     'Time' = getCellColData(CD16s, 'DaysPSO')[colnames(nonoverlapMat),1], 
-                     'Trajectory' = getCellColData(CD16s, 'Trajectory')[colnames(nonoverlapMat),1],
-                    'PTID' = getCellColData(CD16s, 'PTID')[colnames(nonoverlapMat),1],
-                    'Stages' = getCellColData(CD16s, 'InfectionStages')[colnames(nonoverlapMat),1])
-all(timeDf$Cells == colnames(nonoverlapMat)) #TRUE
-                             
-timeDf$Time[timeDf$Time < 0] = 200
-# Test for percent variance explained by time.
-cl <- parallel::makeCluster(35)
-formula1 = as.formula(exp ~ c(1|Stages) + c(1|Trajectory)+c(1|PTID))
-parallel::clusterExport(cl=cl, varlist=c("formula1","nonoverlapMat", "overlapMat", "timeDf",'extractVarDecomp'), envir=environment())
-                             
-CorrVal <- pbapply::pblapply(c(1:dim(nonoverlapMat)[1]),
-        function(x) {
-           #print(x)
-          data.frame(Time = MOCHA:::weightedZISpearman(nonoverlapMat[x,], timeDf$Time), 
-                     Trajectory = MOCHA:::weightedZISpearman(nonoverlapMat[x,], timeDf$Trajectory))
-
-}, cl = cl) %>% do.call('rbind',.)
-                             
-sum(abs(CorrVal$Time) > abs(CorrVal$Trajectory))
-sum(abs(CorrVal$Time) < abs(CorrVal$Trajectory))                          
-CorrVal2 <- pbapply::pblapply(c(1:dim(overlapMat)[1]),
-        function(x) {
-           #print(x)
-          data.frame(Time = MOCHA:::weightedZISpearman(overlapMat[x,], timeDf$Time), 
-                     Trajectory = MOCHA:::weightedZISpearman(overlapMat[x,], timeDf$Trajectory))
-
-}, cl = cl) %>% do.call('rbind',.)
-                             
-sum(abs(CorrVal2$Time) > abs(CorrVal2$Trajectory))
-sum(abs(CorrVal2$Time) < abs(CorrVal2$Trajectory))
-                             
-data.frame(Corr = abs(c(CorrVal$Time, CorrVal2$Time, CorrVal$Trajectory, CorrVal2$Trajectory)), 
-           Type = c(rep('Time', length(CorrVal$Time)+length(CorrVal2$Time)),
-                    rep('Trajectory', length(CorrVal$Time)+length(CorrVal2$Time))),
-            Group = c(rep('TrajectoryOnly', length(CorrVal$Time)),
-                        rep('Common', length(CorrVal2$Time)),
-                    rep('TrajectoryOnly', length(CorrVal$Time)),
-                        rep('Common', length(CorrVal2$Time)))) %>%                                                                    ggplot(., aes(x = Corr, fill = Group)) + 
-                      geom_histogram(alpha = 0.3) + theme_bw() +
-                      facet_wrap(~ Type)
-                             
-data.frame(Corr = abs(c(CorrVal$Time, CorrVal2$Time, CorrVal$Trajectory, CorrVal2$Trajectory)), 
-           Type = c(rep('Time', length(CorrVal$Time)+length(CorrVal2$Time)),
-                    rep('Trajectory', length(CorrVal$Time)+length(CorrVal2$Time))),
-            Group = c(rep('TrajectoryOnly', length(CorrVal$Time)),
-                        rep('Common', length(CorrVal2$Time)),
-                    rep('TrajectoryOnly', length(CorrVal$Time)),
-                        rep('Common', length(CorrVal2$Time)))) %>%                                                                    ggplot(., aes(x = Corr, fill = Group)) + 
-                      geom_density(alpha = 0.3) + theme_bw() +
-                      facet_wrap(~ Type, scales = 'free')     
-                                        
-cor(timeDf$Time[timeDf$Time != 200], timeDf$Trajectory[timeDf$Time != 200], method = 'spearman')
-    
-exp ~ c(1 | Stages) + c(1 | Trajectory) + c(1 | PTID)
-lmerTest::lmer(formula = as.formula(exp ~ c(1|Stages) + c(1 | PTID)), data = df1)
-                             
-suppressMessages(varDecompRes <- pbapply::pblapply(c(1:dim(nonoverlapMat)[1]),
-        function(x) {
-           
-           tryCatch({
-                df1 <-  data.frame(exp = as.numeric(nonoverlapMat[x,]), 
-                timeDf, stringsAsFactors = TRUE)
-                lmem1 <- lmerTest::lmer(formula = formula1, data = df1)
-                tmp_df <- extractVarDecomp(lmem1, c('Time', 'PTID', 'Trajectory'))
-                rm(lmem1, df1)
-                tmp_df
-           }, error = function(e){
-                tmp_df <- rep(NA, (2 + 1)) 
-                names(tmp_df) <- c('Time','Trajectory', 'Residual')
-                tmp_df
-           })
-
-}, cl = cl), classes = "message")
-varDecomp_df <- do.call('rbind',varDecompRes)
-
-
-extractVarDecomp <- function(lmem1, variableList){
-
-    lmem_re <- as.data.frame(lme4::VarCorr(lmem1))
-    row.names(lmem_re) <- c(lmem_re$grp)
-
-    lmem_re <- lmem_re[c(variableList,'Residual'), ]
-    fix_effect <- lme4::fixef(lmem1)  #get fixed effect
-    lmem_re$CV <- lmem_re$sdcor/fix_effect
-
-    normVar <- (lmem_re$vcov)/sum(lmem_re$vcov)
-    names(normVar) <- row.names(lmem_re) 
-
-    return(normVar)
-
-}
                     
 #################################################################
-                   
-#### 
-library(chromVAR)
-library(chromVARmotifs)
-data(human_pwms_v2)
-                                  
-STM_All <- readRDS('../COVID scATAC Manuscript/SampleTileObject.rds')
-
-STM_All <- addMotifSet(STM_All, pwms = human_pwms_v2,
-                      w = 7, returnObj = TRUE, motifSetName = "Motifs")
-                   
-saveRDS(STM_All, 'MOCHA_All_SampleTileMatrix.RDS')
-STM_All <- readRDS('MOCHA_All_SampleTileMatrix.RDS')
-                                  
-library(BSgenome.Hsapiens.UCSC.hg38)
-library(SummarizedExperiment)
-library(tidyverse)
-library(plyranges)
-              
-object1 <- MOCHA::combineSampleTileMatrix(STM)
-
-
                                                        
 ##### Compare with Monocle3 ChromVar trajectory
                                                        
@@ -605,15 +439,4 @@ findTrunk <- function(pathway, TreeStructure, IDMatrix, exportTree = FALSE){
     }
     return(TrunkDescription)
 
-}
-
-
-###
-                        
-pullLmerCoef <- function(LmerList, Coeff_Num, numCores = 1){
-    
-    parallel::mclapply(seq_along(LmerList), function(x) {
-        summary(LmerList[[x]])$coefficients[,Coeff_Num]
-        }, mc.cores = numCores )
-    
 }
