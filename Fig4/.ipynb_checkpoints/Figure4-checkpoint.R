@@ -16,8 +16,8 @@ library(WebGestaltR)
 
 setwd('scMACS_Analysis')
 
-FullCovid <- loadArchRProject('../Old COVID work/FullCovid')
-medFrags <- median(FullCovid$nFrags)
+## Taken from the larger ArchRProject. 
+studySignal = 3628
 MonoDCE <- loadArchRProject('MonoDC_Edits')
 
 tR <- callOpenTiles( 
@@ -26,9 +26,9 @@ tR <- callOpenTiles(
     cellPopulations= 'CD16 Mono',
     TxDb = TxDb.Hsapiens.UCSC.hg38.refGene,
     Org = org.Hs.eg.db,
-    outDir = NULL,#getOutputDirectory(MonoDCE),
-    numCores = 35,
-    studySignal= medFrags
+    outDir = getOutputDirectory(MonoDCE),
+    numCores = 45,
+    studySignal= studySignal
 )
 
 saveRDS(tR, 'CD16_tileResults.rds')
@@ -44,7 +44,7 @@ plotConsensus(tR, groupColumn = 'InfectionStages',
                      numCores = 25)
 
 STM <- getSampleTileMatrix( 
-    tR2,
+    tR,
     groupColumn = 'InfectionStages',
     threshold = 0.2,
     numCores = 40
@@ -67,7 +67,7 @@ saveArchRProject(MonoDCE)
 ### Let's compare COVID+ early infection (< day 15) vs Uninfected Controls
 
 daps <- getDifferentialAccessibleTiles(STM,cellPopulation = 'CD16 Mono',
-                                           groupColumn = 'InfectionStages',
+                                           groupColumn = 'InfectionStages'r,
                                            foreground = 'Early Infection',
                                            background = 'Uninfected',
                                            signalThreshold = 12,
@@ -151,17 +151,18 @@ PathAnnot = lapply(tmp1$description, function(y)
                              function(x) findTrunk(x, Hierarch, ReactID))))  %>% unlist()
 
 PathAnnot[grepl('external stimuli',PathAnnot)] = 'Cellular responses to stimuli'
-PathAnnot[grepl('of RNA|of protein',PathAnnot)] = 'Signaling Transduction'
-PathAnnot[grepl('Mitotic G1-G1/S phases',PathAnnot)] = 'Cell Cycle'               PathAnnot[grepl('Diseases of signal transduction',PathAnnot)] = 'Disease'                            
+PathAnnot[grepl('Mitotic',PathAnnot)] = 'Cell Cycle'               PathAnnot[grepl('Diseases of signal transduction',PathAnnot)] = 'Disease'                            
                                   
 PathAnnot2 = lapply(tmp2$description, function(y)
                     unlist(lapply(y, 
                              function(x) findTrunk(x, Hierarch, ReactID))))  %>% unlist()
 PathAnnot2[grepl('beta-catenin|CTNNB1',PathAnnot2)] = 'Disease'
 PathAnnot2[grepl('Rho',PathAnnot2)] = 'Metabolism'
+tmp2$TopLevel = PathAnnot2
+tmp1$TopLevel = PathAnnot                                  
 
                                   
-
+                                  
 pdf('Fig3_b.pdf')
 
 ggplot(DAP_Reactome, aes(x = description,
@@ -516,6 +517,7 @@ enrich_df <- MotifEnrichment(altTSS_Network,backGround, posList)
                     
 write.csv(enrich_df, 'CD16_MotifEnrichment_AltTSS_v2.csv')
 
+enrich_df <- read.csv('CD16_MotifEnrichment_AltTSS_v2.csv', row.names= 1)
 
 enrich_df2 <- enrich_df  %>% 
                 dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.))) %>%
@@ -554,18 +556,18 @@ ligandtf <- readRDS('ligand_tf_matrix.rds')
 filteredTF <- ligandtf[rownames(ligandtf) %in% unique(enrich_df2$TranscriptionFactor), ]             
 PHyperLigandTF(ligandtf, enrich_df2, 'CXCL12',
                    motifColumn = "TranscriptionFactor", 
+                            stat_column = 'mlog10Padj',
                            stat_threshold = 2,
                            verbose = FALSE)                    
 
 ligandMSEA <- MotifSetEnrichmentAnalysis(ligandtf, enrich_df2, 
                                        motifColumn = "TranscriptionFactor", 
                                        ligands = colnames(filteredTF)[colSums(filteredTF) > 0],
+                                        stat_column = 'mlog10Padj',
                                        stat_threshold = 2, 
                                        annotationName = 'CellType', annotation = "none", 
                                        numCores = 30, verbose = FALSE) %>%
-                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA))
-oldMSEA <-  read.csv('CD16_AltTSS_LigandMSEA.csv')
-oldMSEA[oldMSEA$adjp_val < 0.05,]       
+                        mutate(Label = ifelse(adjp_val < 0.05, ligand, NA)) 
                                   
 ligandMSEA[ligandMSEA$adjp_val < 0.05,]
 write.csv(ligandMSEA, 'CD16_AltTSS_LigandMSEA.csv')
