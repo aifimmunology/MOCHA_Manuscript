@@ -1,0 +1,181 @@
+"","pathway","TF","Perc_gene"
+"1","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","SPIB",0.3
+"2","Toll Like Receptor 4 (TLR4) Cascade","SPIB",0.166666666666667
+"3","Toll-like Receptor Cascades","SPIB",0.259259259259259
+"4","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","SPIB",0.157894736842105
+"5","Toll Like Receptor TLR6:TLR2 Cascade","SPIB",0.157894736842105
+"6","IRAK1 recruits IKK complex","SPIB",0
+"7","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","SPIB",0
+"8","Toll Like Receptor 9 (TLR9) Cascade","SPIB",0.210526315789474
+"9","Toll Like Receptor TLR1:TLR2 Cascade","SPIB",0.157894736842105
+"10","Toll Like Receptor 2 (TLR2) Cascade","SPIB",0.157894736842105
+"11","Toll Like Receptor 7/8 (TLR7/8) Cascade","SPIB",0.166666666666667
+"12","MyD88 dependent cascade initiated on endosome","SPIB",0.166666666666667
+"13","RIP-mediated NFkB activation via ZBP1","SPIB",0.333333333333333
+"14","NOD1/2 Signaling Pathway","SPIB",0.444444444444444
+"15","TRAF6 mediated NF-kB activation","SPIB",0.285714285714286
+"16","Toll Like Receptor 10 (TLR10) Cascade","SPIB",0.1875
+"17","Toll Like Receptor 5 (TLR5) Cascade","SPIB",0.1875
+"18","MyD88 cascade initiated on plasma membrane","SPIB",0.1875
+"19","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","ELF5",0.2
+"20","Toll Like Receptor 4 (TLR4) Cascade","ELF5",0.25
+"21","Toll-like Receptor Cascades","ELF5",0.296296296296296
+"22","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","ELF5",0.105263157894737
+"23","Toll Like Receptor TLR6:TLR2 Cascade","ELF5",0.105263157894737
+"24","IRAK1 recruits IKK complex","ELF5",0
+"25","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","ELF5",0
+"26","Toll Like Receptor 9 (TLR9) Cascade","ELF5",0.210526315789474
+"27","Toll Like Receptor TLR1:TLR2 Cascade","ELF5",0.105263157894737
+"28","Toll Like Receptor 2 (TLR2) Cascade","ELF5",0.105263157894737
+"29","Toll Like Receptor 7/8 (TLR7/8) Cascade","ELF5",0.166666666666667
+"30","MyD88 dependent cascade initiated on endosome","ELF5",0.166666666666667
+"31","RIP-mediated NFkB activation via ZBP1","ELF5",0.5
+"32","NOD1/2 Signaling Pathway","ELF5",0.333333333333333
+"33","TRAF6 mediated NF-kB activation","ELF5",0.285714285714286
+"34","Toll Like Receptor 10 (TLR10) Cascade","ELF5",0.125
+"35","Toll Like Receptor 5 (TLR5) Cascade","ELF5",0.125
+"36","MyD88 cascade initiated on plasma membrane","ELF5",0.125
+"37","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","SPIC",0.3
+"38","Toll Like Receptor 4 (TLR4) Cascade","SPIC",0.125
+"39","Toll-like Receptor Cascades","SPIC",0.148148148148148
+"40","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","SPIC",0.157894736842105
+"41","Toll Like Receptor TLR6:TLR2 Cascade","SPIC",0.157894736842105
+"42","IRAK1 recruits IKK complex","SPIC",0
+"43","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","SPIC",0
+"44","Toll Like Receptor 9 (TLR9) Cascade","SPIC",0.157894736842105
+"45","Toll Like Receptor TLR1:TLR2 Cascade","SPIC",0.157894736842105
+"46","Toll Like Receptor 2 (TLR2) Cascade","SPIC",0.157894736842105
+"47","Toll Like Receptor 7/8 (TLR7/8) Cascade","SPIC",0.166666666666667
+"48","MyD88 dependent cascade initiated on endosome","SPIC",0.166666666666667
+"49","RIP-mediated NFkB activation via ZBP1","SPIC",0.333333333333333
+"50","NOD1/2 Signaling Pathway","SPIC",0.333333333333333
+"51","TRAF6 mediated NF-kB activation","SPIC",0.285714285714286
+"52","Toll Like Receptor 10 (TLR10) Cascade","SPIC",0.1875
+"53","Toll Like Receptor 5 (TLR5) Cascade","SPIC",0.1875
+"54","MyD88 cascade initiated on plasma membrane","SPIC",0.1875
+"55","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","PLAGL1",0.5
+"56","Toll Like Receptor 4 (TLR4) Cascade","PLAGL1",0.291666666666667
+"57","Toll-like Receptor Cascades","PLAGL1",0.296296296296296
+"58","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","PLAGL1",0.263157894736842
+"59","Toll Like Receptor TLR6:TLR2 Cascade","PLAGL1",0.263157894736842
+"60","IRAK1 recruits IKK complex","PLAGL1",0.333333333333333
+"61","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","PLAGL1",0.333333333333333
+"62","Toll Like Receptor 9 (TLR9) Cascade","PLAGL1",0.315789473684211
+"63","Toll Like Receptor TLR1:TLR2 Cascade","PLAGL1",0.263157894736842
+"64","Toll Like Receptor 2 (TLR2) Cascade","PLAGL1",0.263157894736842
+"65","Toll Like Receptor 7/8 (TLR7/8) Cascade","PLAGL1",0.333333333333333
+"66","MyD88 dependent cascade initiated on endosome","PLAGL1",0.333333333333333
+"67","RIP-mediated NFkB activation via ZBP1","PLAGL1",0.5
+"68","NOD1/2 Signaling Pathway","PLAGL1",0.333333333333333
+"69","TRAF6 mediated NF-kB activation","PLAGL1",0.428571428571429
+"70","Toll Like Receptor 10 (TLR10) Cascade","PLAGL1",0.3125
+"71","Toll Like Receptor 5 (TLR5) Cascade","PLAGL1",0.3125
+"72","MyD88 cascade initiated on plasma membrane","PLAGL1",0.3125
+"73","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","ETV6",0.3
+"74","Toll Like Receptor 4 (TLR4) Cascade","ETV6",0.208333333333333
+"75","Toll-like Receptor Cascades","ETV6",0.259259259259259
+"76","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","ETV6",0.210526315789474
+"77","Toll Like Receptor TLR6:TLR2 Cascade","ETV6",0.210526315789474
+"78","IRAK1 recruits IKK complex","ETV6",0.333333333333333
+"79","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","ETV6",0.333333333333333
+"80","Toll Like Receptor 9 (TLR9) Cascade","ETV6",0.263157894736842
+"81","Toll Like Receptor TLR1:TLR2 Cascade","ETV6",0.210526315789474
+"82","Toll Like Receptor 2 (TLR2) Cascade","ETV6",0.210526315789474
+"83","Toll Like Receptor 7/8 (TLR7/8) Cascade","ETV6",0.222222222222222
+"84","MyD88 dependent cascade initiated on endosome","ETV6",0.222222222222222
+"85","RIP-mediated NFkB activation via ZBP1","ETV6",0.5
+"86","NOD1/2 Signaling Pathway","ETV6",0.333333333333333
+"87","TRAF6 mediated NF-kB activation","ETV6",0.428571428571429
+"88","Toll Like Receptor 10 (TLR10) Cascade","ETV6",0.25
+"89","Toll Like Receptor 5 (TLR5) Cascade","ETV6",0.25
+"90","MyD88 cascade initiated on plasma membrane","ETV6",0.25
+"91","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","JUNB",0.5
+"92","Toll Like Receptor 4 (TLR4) Cascade","JUNB",0.416666666666667
+"93","Toll-like Receptor Cascades","JUNB",0.444444444444444
+"94","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","JUNB",0.315789473684211
+"95","Toll Like Receptor TLR6:TLR2 Cascade","JUNB",0.315789473684211
+"96","IRAK1 recruits IKK complex","JUNB",0.5
+"97","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","JUNB",0.5
+"98","Toll Like Receptor 9 (TLR9) Cascade","JUNB",0.421052631578947
+"99","Toll Like Receptor TLR1:TLR2 Cascade","JUNB",0.315789473684211
+"100","Toll Like Receptor 2 (TLR2) Cascade","JUNB",0.315789473684211
+"101","Toll Like Receptor 7/8 (TLR7/8) Cascade","JUNB",0.388888888888889
+"102","MyD88 dependent cascade initiated on endosome","JUNB",0.388888888888889
+"103","RIP-mediated NFkB activation via ZBP1","JUNB",0.666666666666667
+"104","NOD1/2 Signaling Pathway","JUNB",0.555555555555556
+"105","TRAF6 mediated NF-kB activation","JUNB",0.428571428571429
+"106","Toll Like Receptor 10 (TLR10) Cascade","JUNB",0.375
+"107","Toll Like Receptor 5 (TLR5) Cascade","JUNB",0.375
+"108","MyD88 cascade initiated on plasma membrane","JUNB",0.375
+"109","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","FOSL2",0.5
+"110","Toll Like Receptor 4 (TLR4) Cascade","FOSL2",0.416666666666667
+"111","Toll-like Receptor Cascades","FOSL2",0.444444444444444
+"112","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","FOSL2",0.315789473684211
+"113","Toll Like Receptor TLR6:TLR2 Cascade","FOSL2",0.315789473684211
+"114","IRAK1 recruits IKK complex","FOSL2",0.5
+"115","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","FOSL2",0.5
+"116","Toll Like Receptor 9 (TLR9) Cascade","FOSL2",0.421052631578947
+"117","Toll Like Receptor TLR1:TLR2 Cascade","FOSL2",0.315789473684211
+"118","Toll Like Receptor 2 (TLR2) Cascade","FOSL2",0.315789473684211
+"119","Toll Like Receptor 7/8 (TLR7/8) Cascade","FOSL2",0.388888888888889
+"120","MyD88 dependent cascade initiated on endosome","FOSL2",0.388888888888889
+"121","RIP-mediated NFkB activation via ZBP1","FOSL2",0.666666666666667
+"122","NOD1/2 Signaling Pathway","FOSL2",0.555555555555556
+"123","TRAF6 mediated NF-kB activation","FOSL2",0.428571428571429
+"124","Toll Like Receptor 10 (TLR10) Cascade","FOSL2",0.375
+"125","Toll Like Receptor 5 (TLR5) Cascade","FOSL2",0.375
+"126","MyD88 cascade initiated on plasma membrane","FOSL2",0.375
+"127","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","SMARCC1",0.5
+"128","Toll Like Receptor 4 (TLR4) Cascade","SMARCC1",0.416666666666667
+"129","Toll-like Receptor Cascades","SMARCC1",0.444444444444444
+"130","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","SMARCC1",0.315789473684211
+"131","Toll Like Receptor TLR6:TLR2 Cascade","SMARCC1",0.315789473684211
+"132","IRAK1 recruits IKK complex","SMARCC1",0.5
+"133","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","SMARCC1",0.5
+"134","Toll Like Receptor 9 (TLR9) Cascade","SMARCC1",0.421052631578947
+"135","Toll Like Receptor TLR1:TLR2 Cascade","SMARCC1",0.315789473684211
+"136","Toll Like Receptor 2 (TLR2) Cascade","SMARCC1",0.315789473684211
+"137","Toll Like Receptor 7/8 (TLR7/8) Cascade","SMARCC1",0.388888888888889
+"138","MyD88 dependent cascade initiated on endosome","SMARCC1",0.388888888888889
+"139","RIP-mediated NFkB activation via ZBP1","SMARCC1",0.666666666666667
+"140","NOD1/2 Signaling Pathway","SMARCC1",0.555555555555556
+"141","TRAF6 mediated NF-kB activation","SMARCC1",0.428571428571429
+"142","Toll Like Receptor 10 (TLR10) Cascade","SMARCC1",0.375
+"143","Toll Like Receptor 5 (TLR5) Cascade","SMARCC1",0.375
+"144","MyD88 cascade initiated on plasma membrane","SMARCC1",0.375
+"145","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","FOSL1",0.5
+"146","Toll Like Receptor 4 (TLR4) Cascade","FOSL1",0.416666666666667
+"147","Toll-like Receptor Cascades","FOSL1",0.444444444444444
+"148","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","FOSL1",0.315789473684211
+"149","Toll Like Receptor TLR6:TLR2 Cascade","FOSL1",0.315789473684211
+"150","IRAK1 recruits IKK complex","FOSL1",0.5
+"151","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","FOSL1",0.5
+"152","Toll Like Receptor 9 (TLR9) Cascade","FOSL1",0.421052631578947
+"153","Toll Like Receptor TLR1:TLR2 Cascade","FOSL1",0.315789473684211
+"154","Toll Like Receptor 2 (TLR2) Cascade","FOSL1",0.315789473684211
+"155","Toll Like Receptor 7/8 (TLR7/8) Cascade","FOSL1",0.388888888888889
+"156","MyD88 dependent cascade initiated on endosome","FOSL1",0.388888888888889
+"157","RIP-mediated NFkB activation via ZBP1","FOSL1",0.666666666666667
+"158","NOD1/2 Signaling Pathway","FOSL1",0.555555555555556
+"159","TRAF6 mediated NF-kB activation","FOSL1",0.428571428571429
+"160","Toll Like Receptor 10 (TLR10) Cascade","FOSL1",0.375
+"161","Toll Like Receptor 5 (TLR5) Cascade","FOSL1",0.375
+"162","MyD88 cascade initiated on plasma membrane","FOSL1",0.375
+"163","TAK1 activates NFkB by phosphorylation and activation of IKKs complex","JUN",0.5
+"164","Toll Like Receptor 4 (TLR4) Cascade","JUN",0.458333333333333
+"165","Toll-like Receptor Cascades","JUN",0.481481481481481
+"166","MyD88:MAL(TIRAP) cascade initiated on plasma membrane","JUN",0.368421052631579
+"167","Toll Like Receptor TLR6:TLR2 Cascade","JUN",0.368421052631579
+"168","IRAK1 recruits IKK complex","JUN",0.5
+"169","IRAK1 recruits IKK complex upon TLR7/8 or 9 stimulation","JUN",0.5
+"170","Toll Like Receptor 9 (TLR9) Cascade","JUN",0.421052631578947
+"171","Toll Like Receptor TLR1:TLR2 Cascade","JUN",0.368421052631579
+"172","Toll Like Receptor 2 (TLR2) Cascade","JUN",0.368421052631579
+"173","Toll Like Receptor 7/8 (TLR7/8) Cascade","JUN",0.388888888888889
+"174","MyD88 dependent cascade initiated on endosome","JUN",0.388888888888889
+"175","RIP-mediated NFkB activation via ZBP1","JUN",0.666666666666667
+"176","NOD1/2 Signaling Pathway","JUN",0.555555555555556
+"177","TRAF6 mediated NF-kB activation","JUN",0.428571428571429
+"178","Toll Like Receptor 10 (TLR10) Cascade","JUN",0.375
+"179","Toll Like Receptor 5 (TLR5) Cascade","JUN",0.375
+"180","MyD88 cascade initiated on plasma membrane","JUN",0.375
