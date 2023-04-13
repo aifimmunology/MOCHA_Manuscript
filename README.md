@@ -11,4 +11,4 @@ This repository is meant for code required for the MOCHA manuscript. Within this
 
 ## MOCHA R package 
 
-MOCHA is available for direct installation from CRAN. Additionally, it can be installed directly from Github following the instructions [here](https://github.com/aifimmunology/MOCHA). 
+MOCHA is available for direct installation from [CRAN](https://cran.r-project.org/web/packages/MOCHA/). Additionally, it can be installed directly from Github following the instructions [here](https://github.com/aifimmunology/MOCHA). 
