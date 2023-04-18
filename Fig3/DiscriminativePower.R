@@ -26,7 +26,7 @@ meta <- colData(STM)
 ##Calculate Holly's G
 findConcordance <- function(meta, cluster){
     
-     cM <- confusionMatrix(meta$COVID_status[
+     cM <- ArchR::confusionMatrix(meta$COVID_status[
                  match(names(cluster), rownames(meta))], cluster) 
 
      s1 = cM[1,1] + cM[2,2]
