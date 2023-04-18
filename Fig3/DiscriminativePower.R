@@ -122,8 +122,23 @@ wilcox.test(filter(allGs, Method == 'ArchR')$G, filter(allGs, Method == 'Mocha')
 wilcox.test(filter(allGs, Method == 'Signac')$G, filter(allGs, Method == 'Mocha')$G) # p-value < 2.2e-16
 wilcox.test(filter(allGs, Method == 'Signac')$G, filter(allGs, Method == 'ArchR')$G) # p-value = 0.01809
 
-percentBreakDown <- rbind(mColsAll_Perc,mCols_Perc) %>% 
-                             pivot_wider(id_cols = 'type', names_from = 'Type', values_from = 'Percentage') %>%
+allDiffs <- append(allFeatures, list(MUnique, AUnique, MA_u, SA_u, All_u))
+names(allDiffs) <- c('Mocha', 'ArchR', 'Signac', 'Mocha_Unique', 'ArchR_Unique', 'Mocha_ArchR',
+                          'Signac_ArchR', 'All_Methods')
+                   
+mColsAll_Perc <- lapply(seq_along(allDiffs), function(x){
+    
+                subList <- mcols(plyranges::filter_by_overlaps(rowRanges(STM), 
+                                                               MOCHA::StringsToGRanges(allDiffs[[x]]))) %>% 
+                    as.data.frame()
+                group_by(subList, tileType) %>% summarize(Percentage = dplyr::n()/dim(subList)[1]) %>%
+                mutate(type = names(allDiffs)[x])
+    })
+names(mColsAll_Perc) <- c('Mocha', 'ArchR', 'Signac', 'Mocha_Unique', 'ArchR_Unique', 'Mocha_ArchR',
+                          'Signac_ArchR', 'All_Methods')
+
+percentBreakDown <- do.call('rbind', mColsAll_Perc)  %>% 
+                        pivot_wider(id_cols = 'type', names_from = 'tileType', values_from = 'Percentage') %>%
                              dplyr::rename('Method' = 'type') 
 
 ## Code used from here:
