@@ -8,7 +8,7 @@
 # ###########################################################
 
 ## Load Libraries
-require(scMACS)
+require(MOCHA)
 require(ArchR)
 
 ## Load the ArchR Project
@@ -57,9 +57,10 @@ tileResults <- callOpenTiles(
     ArchRProj,
     cellPopLabel = "CellSubsets" ,
     cellPopulations = "CD16 Mono",
-    TxDb = TxDb,
-    Org = Org,
-    numCores = 20,
+    TxDb = "TxDb.Hsapiens.UCSC.hg38.refGene",
+    Org = "org.Hs.eg.db",
+    numCores = 50,
+    outDir = NULL,
     studySignal = studySignal
 )
 
