@@ -95,8 +95,8 @@ differentials <- getDifferentialAccessibleTiles(
     groupColumn = "COVID_status",
     foreground =  "Positive",
     background =  "Negative",
-    fdrToDisplay = 0.2,
-    outputGRanges = FALSE,
+    fdrToDisplay = 1,
+    outputGRanges = TRUE,
     numCores = 40
 )
 
