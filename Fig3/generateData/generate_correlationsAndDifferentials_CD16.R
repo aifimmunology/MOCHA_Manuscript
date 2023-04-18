@@ -73,13 +73,12 @@ tileResults <- callOpenTiles(
 #    primary input to downstream analyses.
 ###########################################################
 
-SampleTileMatrices <- scMACS::getSampleTileMatrix( 
+SampleTileMatrices <- getSampleTileMatrix( 
     tileResults,
     cellPopulations = "CD16 Mono",
     groupColumn = "COVID_status",
     threshold = 0.2,
-    NAtoZero = TRUE,
-    log2Intensity = TRUE
+    verbose=T
 )
 
 ###########################################################
