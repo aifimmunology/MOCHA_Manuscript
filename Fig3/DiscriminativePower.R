@@ -1,6 +1,6 @@
 # #####################################################
 
-STM <- readRDS('SampleTileObject_CD16s_EarlyComp.rds')
+STM <- readRDS('CD16_SampleTileObj.rds')
 
 # Randomly select 8 DATs, do kmeans clustering across samples within STAM, measure accuracy. 
 # Repeat 1000x, then generate violin plots for each method
