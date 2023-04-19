@@ -32,6 +32,17 @@ Obj$time <- Obj$days_since_symptoms-mean(Obj$days_since_symptoms, na.rm=T)
 Obj$time_sqrd <- (Obj$time)^2
 numCores = 1
 
+minimalMeta= as.data.table(Obj@colData)
+minimalMeta=minimalMeta[, c('Sample','COVID_status','sex_at_birth','Age','Subject','Race','Ethnicity','days_since_symptoms')]
+minimalMeta=minimalMeta[COVID_status=='Positive']
+
+write.csv( Obj@assays@data$z,
+					 file='~/Desktop/tf_matrix.csv'
+)
+write.csv( minimalMeta,
+					 file='~/Desktop/tf_metadata.csv'
+)
+
 ##############################################################################
 ##############################################################################
 ### Define linear formula
