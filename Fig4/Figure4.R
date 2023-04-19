@@ -553,12 +553,7 @@ dev.off()
 
 ligandtf <- readRDS('ligand_tf_matrix.rds')   
 
-filteredTF <- ligandtf[rownames(ligandtf) %in% unique(enrich_df2$TranscriptionFactor), ]             
-PHyperLigandTF(ligandtf, enrich_df2, 'CXCL12',
-                   motifColumn = "TranscriptionFactor", 
-                            stat_column = 'mlog10Padj',
-                           stat_threshold = 2,
-                           verbose = FALSE)                    
+filteredTF <- ligandtf[rownames(ligandtf) %in% unique(enrich_df2$TranscriptionFactor), ]                  
 
 ligandMSEA <- MotifSetEnrichmentAnalysis(ligandtf, enrich_df2, 
                                        motifColumn = "TranscriptionFactor", 
