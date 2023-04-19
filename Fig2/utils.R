@@ -315,6 +315,12 @@ summarize_celltypes <- function(i, numCores=10){
     tsam <- RaggedExperiment::compactAssay(tileResults[[cells[i]]], 
                                            i='TotalIntensity')
     colnames(tsam) <- gsub('_','-', colnames(tsam))
+    
+    mocha_df = data.frame(
+        Tiles = colSums(sampleTileMatrix, na.rm=T),
+        Sample = colnames(sampleTileMatrix),
+        Model='MOCHA'
+        )
     ################################################################
     ################################################################
 
@@ -384,6 +390,11 @@ summarize_celltypes <- function(i, numCores=10){
                                  )
     macs2_tile_list2 <- macs2_tile_list3                             
 
+    macs2_df = data.frame(
+        Tiles = sapply(macs2_tile_list2, nrow),
+        Sample = tmpNames,    
+        Model='MACS2'
+        )
     ################################################################
     ################################################################
 
@@ -446,22 +457,27 @@ summarize_celltypes <- function(i, numCores=10){
                                  )
     homer_peak_list2 <- homer_peak_list3
 
+    homer_df = data.frame(
+        Tiles = sapply(homer_peak_list2, nrow),
+        Sample = tmpHomerName,    
+        Model='HOMER'
+    )
     ################################################################
     ################################################################
     ### Panel B: Covid-19
 
     N =  ncol(sampleTileMatrix)
 
-    tilesPerMethod<- data.table(
-                Macs2 = sapply(macs2_tile_list2, function(x) nrow(x)
-                            ),
-                Homer = sapply(homer_peak_list2, function(x) nrow(x)
-                            ),
-                MOCHA = colSums(sampleTileMatrix, na.rm=T)
-            )
+    tilesPerMethod<- rbind(macs2_df,
+                           homer_df,
+                           mocha_df)
 
     tilesPerMethod =  melt(tilesPerMethod)
     tilesPerMethod$CellPop = cells[i]
+    
+    cnames = data.frame(cbind(sort(mocha_df$Sample), sort(macs2_df$Sample), sort(homer_df$Sample)))
+    
+    tilesPerMethod$Sample = gsub('_','-',tilesPerMethod$Sample)
     
     homer_population <- getConsensusTiles(homer_peak_list2)
     macs2_population <- getConsensusTiles(macs2_tile_list2)

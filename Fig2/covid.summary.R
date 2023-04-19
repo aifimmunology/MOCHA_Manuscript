@@ -35,7 +35,7 @@ metadata = as.data.table(ArchRProj@cellColData)
 
 ################################################################
 ### load MOCHA Tiles 
-datasetDir = "/home/jupyter/MOCHA_Manuscript/Fig2/Covid-19"
+datasetDir = "/home/jupyter/MOCHA_Manuscript2/Fig2/Covid-19"
 setwd(datasetDir)
 cell_dirs <-  dir('Macs2/')
 cell_dirs = cell_dirs[c(1,3,4)]
@@ -45,7 +45,7 @@ tileResults <- readRDS('MOCHA.RDS')
 ################################################################
 ### panelA cell counts 
 
-cells_per_sample <- metadata[
+cells_per_sample <- metadata[Sample %in% tileResults@colData$Sample & 
     CellSubsets %in% cells, 
     list(Count= .N), 
     by= list(CellSubsets, Sample)]
@@ -87,14 +87,11 @@ tiles <- lapply(total_res_filtered,
                     x$Tiles
                 )
 tiles <- rbindlist(tiles)
-tiles[tiles$variable=='Macs2']$variable <- 'MACS2'
-tiles[tiles$variable=='Homer']$variable <- 'HOMER'
-
 
 cell_levels = c('CD16 Mono','B naive','CD4 CTL TEM')
 tiles$CellPop = factor(tiles$CellPop,
                        levels=cell_levels)
-tiles$variable = factor(tiles$variable,
+tiles$Model = factor(tiles$Model,
                        levels=c('MACS2','HOMER','MOCHA'))
 
 pdf('TileCounts_h.pdf', width=6,height=2.5)

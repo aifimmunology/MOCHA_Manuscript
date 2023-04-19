@@ -476,3 +476,13 @@ dev.off()
 
 
 
+
+nk_mat = fread('/home/jupyter/MOCHA_Manuscript2/SuppFig2_ModelEval/NK_metrics.csv')                           
+pdf('NK_performance.pdf')
+        p= ggplot(nk_mat,
+               aes(x=Ncells,
+                   y=value,
+                   col=variable))+ geom_line(lwd=3)+theme_minimal()
+                   
+        print(p)
+        dev.off()
