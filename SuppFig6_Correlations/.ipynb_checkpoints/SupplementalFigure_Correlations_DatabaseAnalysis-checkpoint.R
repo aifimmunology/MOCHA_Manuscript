@@ -4,7 +4,7 @@ library(tidyverse)
 library(plyranges)
 
 ## Load in database links and TSAM object
-STM <- readRDS('SampleTileMatrix_AllCellTypes.rds')
+STM <- readRDS('SampleTileMatrix_AllCellTypes_ForCoAccessibility.rds')
 databaseLinks <- read.csv('ActivePromoterEnhancerLinks_Hg38.csv')
 
 ##Filter to just look at CD8 and CD4 Naive links. 
