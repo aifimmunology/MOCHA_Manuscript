@@ -8,7 +8,7 @@
 # ###########################################################
 
 ## Load Libraries
-require(scMACS)
+require(MOCHA)
 require(ArchR)
 
 ## Load the ArchR Project
@@ -57,9 +57,10 @@ tileResults <- callOpenTiles(
     ArchRProj,
     cellPopLabel = "CellSubsets" ,
     cellPopulations = "CD16 Mono",
-    TxDb = TxDb,
-    Org = Org,
-    numCores = 20,
+    TxDb = "TxDb.Hsapiens.UCSC.hg38.refGene",
+    Org = "org.Hs.eg.db",
+    numCores = 50,
+    outDir = NULL,
     studySignal = studySignal
 )
 
@@ -72,13 +73,12 @@ tileResults <- callOpenTiles(
 #    primary input to downstream analyses.
 ###########################################################
 
-SampleTileMatrices <- scMACS::getSampleTileMatrix( 
+SampleTileMatrices <- getSampleTileMatrix( 
     tileResults,
     cellPopulations = "CD16 Mono",
     groupColumn = "COVID_status",
     threshold = 0.2,
-    NAtoZero = TRUE,
-    log2Intensity = TRUE
+    verbose=T
 )
 
 ###########################################################
@@ -95,8 +95,8 @@ differentials <- getDifferentialAccessibleTiles(
     groupColumn = "COVID_status",
     foreground =  "Positive",
     background =  "Negative",
-    fdrToDisplay = 0.2,
-    outputGRanges = FALSE,
+    fdrToDisplay = 1,
+    outputGRanges = TRUE,
     numCores = 40
 )
 

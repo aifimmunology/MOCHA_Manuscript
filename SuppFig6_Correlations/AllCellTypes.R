@@ -55,7 +55,7 @@ STM2 <- subsetMOCHAObject(STM, subsetBy = 'COVID_status', groupList = 'Positive'
 accMat <- assays(STM2)[['CD16 Mono']][mcols(rowRanges(STM))[,5],]
 
 metaData <- colData(STM)
-                     
+
 startTime <- Sys.time()
 lmemList <- randomEffectModeling(metaData, accMat[c(1:100),], c('Age', 'Sex', 'days_since_symptoms'),
                                  numCores = 15)
@@ -80,8 +80,8 @@ runModeling(list(df, formula1))
 
     MetaDF <- dplyr::filter(as.data.frame(MetaDF), Sample %in% colnames(CountDF))
     CountDF <- CountDF[,match(colnames(CountDF), MetaDF$Sample)]
-                                    
-                                                         
+
+
 startTime <- Sys.time()
 lmemList <- randomEffectModeling(metaData, accMat[c(1:100),], c('Age', 'Sex', 'days_since_symptoms'),
                                  numCores = 15)
@@ -89,6 +89,6 @@ stopTime <- Sys.time()
 
 varComp1 <- getVarDecomp(lmemList)
 varComp2 <- getVarDecomp(lmemList)
-                                    
-runDecomposition(metaData, accMat[c(1:100),], c('Age', 'Sex', 'days_since_symptoms'),
+
+tmp <- runDecomposition(metaData, accMat[c(1:100),], c('Age', 'Sex', 'days_since_symptoms'),
                                  numCores = 15)

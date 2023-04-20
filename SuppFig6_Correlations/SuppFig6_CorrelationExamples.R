@@ -41,8 +41,8 @@ ZIPlots <- lapply(1:dim(ZISpecific)[1], function(x){
     subMat <- data.frame(Tile1 = totalMat[ZISpecific$Tile1[x],], Tile2 = totalMat[ZISpecific$Tile2[x],])
     
     plot_coaccessibility
-    
-    
+
+
 })
 
 NormPlots <- lapply(1:dim(NormSpecific)[1], function(x){
@@ -54,8 +54,8 @@ NormPlots <- lapply(1:dim(NormSpecific)[1], function(x){
         geom_smooth(data = subMat[rowSums(subMat == 0) == 0,], 
                     aes(x = Tile1, y = Tile2, color = 'red'), method=lm) +
     theme_bw() +theme(legend.position = "none") 
-    
-    
+
+
 })
 
 pdf('CorrelationAnalysis_StrongestCorrelations_Unique_ZISpearman_Spearman.pdf')
