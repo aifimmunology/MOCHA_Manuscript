@@ -7,7 +7,7 @@
 
 ###############################################################################
 ###############################################################################
-#install.packages(c('lme4','glmmTMB' 'ggbreak','lmerTest','WebGestaltR'))
+#install.packages(c('lme4','glmmTMB', 'ggbreak','lmerTest','WebGestaltR'))
 require(glmmTMB)
 require(data.table)
 require(MOCHA)
@@ -16,7 +16,7 @@ require(parallel)
 require(lmerTest)
 require(scattermore)
 ### laod data 
-stm = readRDS('/home/jupyter/MOCHA_Manuscript/Fig5/SampleTileObject-2.rds')
+stm = readRDS('/home/jupyter/MOCHA_Manuscript2/Fig5/SampleTileObject-2.rds')
 
 ### extract CD16 Promoters 
 tmp <- plyranges::filter(SummarizedExperiment::rowRanges(stm), tileType == 'Promoter')
@@ -361,14 +361,27 @@ dev.off()
 ######### Extract Full Model Coefficients 
 # Per group 
 
-extract_full_coefs <-  function(x,group1_models){
+extract_full_coefs <-  function(x,models){
             print(x)
-            fit = group1_models[[x]]
+            fit = models[[x]]
             summary_fit = summary(fit)
            
             res = as.data.frame(t(summary_fit$coefficients$cond[,1]))
             res2=as.data.frame(t(summary_fit$coefficients$cond[,4]))
-            return(cbind(res, res2))
+            colnames(res) = paste(colnames(res)[1:4],'coef', sep='_')
+            colnames(res2) = paste(colnames(res2)[1:4],'pval', sep='_')
+            mat = cbind(res, res2)
+       
+            if(is.null(summary_fit$coefficients$zi)){
+                  
+               mat$ZI_Estimate = NA
+               mat$ZI_pval= NA
+            } else {
+               mat = cbind(mat, t(summary_fit$coefficients$zi[,c(1,4)]))
+               colnames(mat)[9:10] <- c('ZI_Estimate','ZI_pval')
+            }
+            
+            return(mat)
 
 }
 
@@ -389,12 +402,9 @@ summarize_results2 <- function(models, fname){
 
 ### save results 
     
-full_model_coefs = summarize_results2(models)
-colnames(full_model_coefs)[1:4] = paste(colnames(full_model_coefs)[1:4],
-                                        'coef', sep='_')
-colnames(full_model_coefs)[5:8] = paste(colnames(full_model_coefs)[5:8],
-                                        'pval', sep='_')       
+full_model_coefs = summarize_results2(models)  
 full_model_coefs = full_model_coefs %>% arrange(time_pval)
+full_model_coefs$FDR = p.adjust(full_model_coefs$time_pval, 'fdr')
 
 write.csv(full_model_coefs,
           file='zero_inflated_coefficients.csv')
