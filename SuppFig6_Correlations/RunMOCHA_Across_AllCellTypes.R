@@ -17,7 +17,7 @@ FullCovid$predictedCellType[grepl('CD8 TEM|CD8 TCM|CD8 TEMRAS', FullCovid$predic
 saveArchRProject(FullCovid)
 
 
-cellTypes <- grep('Plasma|ILC|HSPC', names(table(FullCovid$predictedCellType)), invert = TRUE, value=TRUE)
+cellTypes <- grep('Plasma|ILC', names(table(FullCovid$predictedCellType)), invert = TRUE, value=TRUE)
 
 studySignal= median(FullCovid$nFrags)
 
