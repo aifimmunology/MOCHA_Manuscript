@@ -6,7 +6,7 @@ require(parallel)
 require(data.table)
 source('/home/jupyter/theme.R')
 
-setwd('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling')
+setwd('/home/jupyter/MOCHA_Manuscript2/SuppFig3_Downsampling')
 hg38_altius <- readRDS('hg38_altius_gr.rds')
 hg19_altius <- readRDS('hg19_altius_gr.rds')
 lp <- ArchR::loadArchRProject('/home/jupyter/longPilot')
@@ -41,6 +41,11 @@ cov_altius <- lapply(ctypes_names,
                       )
 stopCluster(cl)
 covid_altius_summary <- unlist(cov_altius)
+covid_mat = data.frame(
+    CellType = ctypes_names,
+    Altius =covid_altius_summary,
+    Dataset ='COVID19'
+)
 
 
 ### Get BM Altius peakset Overlap
@@ -70,6 +75,12 @@ rm(frags_bm)
 gc()
 pryr::mem_used()
 bm_altius_summary <- unlist(bm_altius)
+
+bm_mat = data.frame(
+    CellType = ctypes_names,
+    Altius =bm_altius_summary,
+    Dataset ='Hematopoiesis'
+)
 
 ### Get Long Pilot Altius peakset Overlap
 cl = parallel::makeCluster(50)
@@ -103,26 +114,26 @@ lp_altius_summary <- unlist(lp_altius)
 pryr::mem_used()
 
 
-df = data.table(FRIA = c(bm_altius_summary, 
-                  lp_altius_summary,
-                  covid_altius_summary),
-                Dataset=c(rep('Bone Marrow', length(bm_altius_summary)),
-                          rep('Healthy Donors', length(lp_altius_summary)),
-                          rep('COVID-19', length(covid_altius_summary)))
-                )
+lp_mat = data.frame(
+    CellType = ctypes_names,
+    Altius =lp_altius_summary,
+    Dataset ='HealthyDonors'
+)
 
-df$Dataset <- factor(df$Dataset, levels=c('COVID-19',
-                                          'Healthy Donors',
-                                          'Bone Marrow'))
 
-write.csv(df,
-          file='/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/FRIA.csv'
+combined_df = rbind(
+    covid_mat,
+    bm_mat,
+    lp_mat)
+
+write.csv(combined_df,
+          file='/home/jupyter/MOCHA_Manuscript2/SuppFig3_Downsampling/FRIA.csv'
           )
 
 pdf('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/altius.pdf',
     width=8,
     height=6)
-ggplot(df,
+ggplot(combined_df,
        aes(x=Dataset,
            y=FRIA))+
         geom_point()+geom_violin(scale='width')+ThemeMain+
@@ -141,14 +152,17 @@ df_frags <- data.table(
     nFrags = c(metadf_covid$nFrags,
                metadf_bm$nFrags,
                metadf_lp$nFrags),
+    Sample = c(metadf_covid$Sample,
+               metadf_bm$Sample,
+               metadf_lp$Sample),
     Dataset= c(rep('COVID-19',nrow(metadf_covid)),
-               rep('Bone Marrow',nrow(metadf_bm)),
+               rep('Hematopoiesis',nrow(metadf_bm)),
                rep('Healthy Donors',nrow(metadf_lp)))
     )
 
 df_frags$Dataset <- factor(df_frags$Dataset, levels=c('COVID-19',
                                           'Healthy Donors',
-                                          'Bone Marrow'))
+                                          'Hematopoiesis'))
 
 pdf('/home/jupyter/MOCHA_Manuscript/SuppFig3_Downsampling/nfrags.pdf',
     width=8,
@@ -176,4 +190,41 @@ ggplot(df_frags,
     ggpubr::stat_compare_means()
 dev.off()
               
-                              
+            
+write.csv(df_frags,
+          file='frags_by_dataset.csv')
+
+
+
+
+
+metadf_covid <-  as.data.table(getCellColData(cov))
+metadf_bm <-  as.data.table(getCellColData(bm))
+metadf_lp <-  as.data.table(getCellColData(lp))
+
+
+covid_cellCounts = metadf_covid[, list(Count=.N), 
+                                by=list(Sample, CellSubsets)]
+
+lp_cellCounts = metadf_lp[, list(Count=.N), 
+                                by=list(Sample, predictedGroup_Col2.5)]
+
+bm_cellCounts = metadf_bm[, list(Count=.N),
+                          by=new_cellType]
+bm_cellCounts$Sample = NA
+
+
+covid_cellCounts$Dataset='COVID-19'
+colnames(covid_cellCounts) = c('Sample','Cell','Count','Dataset')
+lp_cellCounts$Dataset='HealthyDonors'
+colnames(lp_cellCounts) = c('Sample','Cell','Count','Dataset')
+bm_cellCounts$Dataset='Hematopoiesis'
+colnames(bm_cellCounts) = c('Cell','Count','Sample','Dataset')
+
+
+df = rbind(covid_cellCounts,
+      lp_cellCounts,
+      bm_cellCounts)
+
+write.csv(df, 
+          file='cell_counts.csv')
