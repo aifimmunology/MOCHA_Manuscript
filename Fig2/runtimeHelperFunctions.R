@@ -12,21 +12,21 @@ ThemeMain <- theme(
 
 # Define a helper to subset the ArchR project to our cellQuants
 # and extract fragments for this subsetted project
-getSubsetArchRFrags <- function(covidArchR, numCells, sampleSpecific = FALSE) {
-  # Subset cells to a random selection of size numCells
-  # This will get fragments across multiple samples
+getSubsetArchRFrags <- function(covidArchR, numSamples) {
+  
+  # Subset cells to a random selection of samples, size numSamples
   set.seed(2022)
-  idxCells <- sample(1:TotalNCells, size = numCells)
-  subsetArchR <- covidArchR[idxCells, ]
+  selectedSamples <- sample(unique(covidArchR$Sample), numSamples)
+  idxSample <- BiocGenerics::which(covidArchR$Sample %in% selectedSamples)
+  subsetArchR <- covidArchR[covidArchR$cellNames[idxSample], ]
+  subsetArchR
 
   # Extract fragments
   popFrags <- MOCHA::getPopFrags(
     ArchRProj = subsetArchR,
-    metaColumn = "CellSubsets",
+    cellPopLabel = "CellSubsets",
     cellSubsets = "ALL",
-    NormMethod = "nCells",
-    numCores = 10,
-    sampleSpecific = sampleSpecific,
+    numCores = globalNCores,
     verbose = FALSE
   )
   rm(subsetArchR)
@@ -35,63 +35,78 @@ getSubsetArchRFrags <- function(covidArchR, numCells, sampleSpecific = FALSE) {
   popFrags
 }
 
-newExportFrags <- function(popFrags, rep, numCells, TxDb){
+# This function creates one bedgraph per sample, and returns 
+# a list of filenames.
+newExportFragsList <- function(popFrags, rep, numSamples, TxDb){
   
   dir.create("./coverage_files")
-  # Export fragments to bedgraph
-  # for use by Homer and MACS2
-  covFileBedGraph <- paste(
-    "tmp", rep, numCells, 
-    "CD14_perThousandCells.bedGraph", 
-  sep = "_")
-  covFileBedGraph <- file.path("./coverage_files", covFileBedGraph)
   
   # Extract norm factor for each group
   # getPopFrags with normMethod=nCells
   # returns (1000/nCells) as the norm factor
-  groups <- gsub("_.*", "", names(popFrags))
+  groups <- gsub("__.*", "", names(popFrags))
   cellNorm <- as.numeric(gsub(".*_", "", names(popFrags)))
   names(cellNorm) <- groups
   
-  # Have to make this a list to generalize to multiple cell
-  # populations, though we only use one cell population
+  # We only use one cell population
   # for this benchmark
   normFactors <- lapply(seq_along(cellNorm), function(x) {
     normFactor <- cellNorm[groups[x]]
   })
   
-  coverage_gr <- getCoverage(
+  # source("/home/jupyter/MOCHA/R/getCoverage.R")
+  coverage_gr <- MOCHA::getCoverage(
    popFrags, 
-   normFactors, 
-   TxDb, 
-   filterEmpty = FALSE, numCores = 1, verbose = FALSE
+   normFactors,
+   TxDb,
+   cl = globalNCores,
+   filterEmpty = FALSE, verbose = FALSE
   )
   
   # export to bedGraph with plyranges
-  plyranges::write_bed_graph(
-    IRanges::stack(as(coverage_gr, "GRangesList")), 
-    covFileBedGraph, 
-    index = FALSE
-  )
-  return(covFileBedGraph)
+  # Export fragments to bedgraph
+  # for use by Homer and MACS2
+  covFileBedGraphList <- mclapply(seq_along(coverage_gr), function(i){
+    
+    covGR <- coverage_gr[[i]]
+    sampleName <- gsub(".*#", "",gsub("__.*", "", names(coverage_gr)[[i]]))
+    
+    covFileBedGraph <- paste(
+      "rep", rep, "nsamples", numSamples, sampleName,
+      "CD14.bedGraph", 
+    sep = "_")
+    covFileBedGraph <- file.path("./coverage_files", covFileBedGraph)
+    
+    plyranges::write_bed_graph(
+      covGR,
+      covFileBedGraph, 
+      index = FALSE
+    )
+    
+    covFileBedGraph
+  })
+  
+  covFileBedGraphList
 }
+  
 
 
 # Helper to run repeated measures
+# These should not be parallelized to avoid
+# influence of resource allocations
 runBenchmark <- function(peakCaller, outDir, numRepeats, name){
   dir.create(outDir)
   message("Now benchmarking: ", basename(outDir))
   runtimes <- lapply(
-    unique(cellQuants),
-    function(TIME) {
+    unique(sampleQuants),
+    function(nsamples) {
       gc()
-      message("Number of Cells: ", TIME)
-      mclapply(
+      message("Number of Samples: ", nsamples)
+      lapply(
         1:numRepeats,
         function(x){
-          peakCaller(numCells = TIME, rep = x, outDir)
-        },
-        mc.cores = 2
+          peakCaller(numSamples = nsamples, rep = x, outDir)
+        }
       )
     }
   )
@@ -110,83 +125,105 @@ runBenchmark <- function(peakCaller, outDir, numRepeats, name){
 ############################################################
 # MACS2 
 ############################################################
-macs2_measure_runtimes <- function(numCells, rep = 1, macs2OutDir) {
+macs2_measure_runtimes <- function(numSamples, rep = 1, macs2OutDir) {
   
-  popFrags <- getSubsetArchRFrags(
-    covidArchR, numCells, sampleSpecific = FALSE
-  )
+  popFrags <- getSubsetArchRFrags(covidArchR, numSamples)
   tic()
-  #~~~~~~~~~~~~~~~~
-  covFileBedGraph <- newExportFrags(popFrags, rep, numCells, TxDb)
+  #~~~~~~~~~~~~~~~~ Parallelize over 10 cores
+  covFileBedGraphList <- newExportFragsList(popFrags, rep, numSamples, TxDb)
   rm(popFrags)
-
-  cmd_sample <- paste(
-    "macs2 callpeak -t",
-    covFileBedGraph,
-    "-g hs -f BED --nolambda --shift -75 --extsize 150 --broad",
-    "--nomodel -n",
-    file.path(macs2OutDir, tools::file_path_sans_ext(basename(covFileBedGraph)))
-  )
-  system(cmd_sample)
+  
+  mclapply(covFileBedGraphList, function(fname){
+    cmd_sample <- paste(
+      "macs2 callpeak -t",
+      fname,
+      "-g hs -f BED --nolambda --shift -75 --extsize 150 --broad",
+      "--nomodel -n",
+      file.path(
+        macs2OutDir, tools::file_path_sans_ext(basename(fname))
+      )
+    )
+    system(cmd_sample)
+    system(paste("rm -R", file.path(
+      macs2OutDir, tools::file_path_sans_ext(basename(fname))
+    )))
+  }, mc.cores = globalNCores)
+  
   #~~~~~~~~~~~~~~~~
   runtime <- toc(log = T)
   runtime_secs <- runtime$toc - runtime$tic
 
   res.df <- data.frame(
     Time = runtime_secs,
-    Ncells = numCells
+    Nsamples = numSamples
   )
+  write.csv(res.df, file.path(
+    macs2OutDir, paste(
+      "rep", rep, "numSamples", numSamples, 'results.csv', sep="_"
+  )))
   gc()
-  file.remove(covFileBedGraph)
+  
+  lapply(covFileBedGraphList, file.remove)
   return(res.df)
 }
 
 ############################################################
 # HOMER
 ############################################################
-homer_measure_runtimes <- function(numCells, rep = 1, homerOutDir) {
+homer_measure_runtimes <- function(numSamples, rep = 1, homerOutDir) {
   
-  popFrags <- getSubsetArchRFrags(
-    covidArchR, numCells, sampleSpecific = FALSE
-  )
+  popFrags <- getSubsetArchRFrags(covidArchR, numSamples)
   
   tic()
-  #~~~~~~~~~~~~~~~~
-  covFileBedGraph <- newExportFrags(popFrags, rep, numCells, TxDb)
+  #~~~~~~~~~~~~~~~~ Parallelize over 10 cores
+  covFileBedGraphList <- newExportFragsList(popFrags, rep, numSamples, TxDb)
   rm(popFrags)
   
-  tagDir <- file.path(
-    homerOutDir, 
-    tools::file_path_sans_ext(basename(covFileBedGraph)), 
-    sep=''
-  )
+  mclapply(covFileBedGraphList, function(covFileBedGraph){
+    
+    tagDir <- file.path(
+      homerOutDir, 
+      tools::file_path_sans_ext(basename(covFileBedGraph)), 
+      sep=''
+    )
+
+    tagdir_cmd <- paste(
+      'makeTagDirectory',
+      tagDir,
+      covFileBedGraph
+    )
+    system(tagdir_cmd)
+
+    callPeaks_cmd <- paste(
+      'findPeaks',
+      tagDir,
+      '>',
+      file.path(tagDir, 'peaks.txt'),
+      '-style histone',
+      sep=' '
+    )
+    system(callPeaks_cmd)
+    system(paste("rm -R", tagDir))
+    
+  }, mc.cores = globalNCores)
   
-  tagdir_cmd <- paste(
-    'makeTagDirectory',
-    tagDir,
-    covFileBedGraph
-  )
-  system(tagdir_cmd)
+  #system(paste("rm -R", tagDir))
   
-  callPeaks_cmd <- paste(
-    'findPeaks',
-    tagDir,
-    '>',
-    file.path(tagDir, 'peaks.txt'),
-    '-style histone',
-    sep=' '
-  )
-  system(callPeaks_cmd)
   #~~~~~~~~~~~~~~~~
   runtime <- toc(log = T)
   runtime_secs <- runtime$toc - runtime$tic
   
   res.df <- data.frame(
     Time = runtime_secs,
-    Ncells = numCells
+    Nsamples = numSamples
   )
+  write.csv(res.df, file.path(
+    homerOutDir, paste(
+      "rep", rep, "numSamples", numSamples, 'results.csv', sep="_"
+    )
+  ))
   gc()
-  file.remove(covFileBedGraph)
+  lapply(covFileBedGraphList, file.remove)
   return(res.df)
 }
 
@@ -194,34 +231,37 @@ homer_measure_runtimes <- function(numCells, rep = 1, homerOutDir) {
 ############################################################
 # MOCHA
 ############################################################
-MOCHA_measure_runtime <- function(numCells, rep = NULL, outDir = NULL) {
+MOCHA_measure_runtime <- function(numSamples, rep = NULL, outDir = NULL) {
 
   # Get sample-specific fragments for MOCHA
-  frags <- getSubsetArchRFrags(
-    covidArchR, numCells, sampleSpecific = FALSE
-  )
+  popFrags <- getSubsetArchRFrags(covidArchR, numSamples)
   
   tic()
-  #~~~~~~~~~~~~~~~~
-  totalFrags <- as.integer(sapply(frags, length))
-  
-  tilesGRanges <- MOCHA:::callTilesBySample(
-    blackList = blackList,
-    returnAllTiles = TRUE,
-    totalFrags = totalFrags,
-    fragsList = frags[[1]],
-    verbose = FALSE,
-    StudypreFactor = study_prefactor
-  )
-  rm(frags)
+  #~~~~~~~~~~~~~~~~ Parallelize over 10 cores
+  totalFrags <- as.integer(sapply(popFrags, length))
+  tileList <- mclapply(popFrags, function(sampleFrags){
+    tilesGRanges <- MOCHA:::callTilesBySample(
+      blackList = blackList,
+      returnAllTiles = TRUE,
+      totalFrags = totalFrags,
+      fragsList = sampleFrags,
+      verbose = FALSE,
+      StudypreFactor = study_prefactor
+    )
+  }, mc.cores = globalNCores)
+  rm(popFrags)
   #~~~~~~~~~~~~~~~~
   runtime <- toc(log = T)
   runtime_secs <- runtime$toc - runtime$tic
   
   res.df <- data.frame(
     Time = runtime_secs,
-    Ncells = numCells
+    Nsamples = numSamples
   )
+  write.csv(res.df, file.path(
+    mochaOutFile, paste(
+      "rep", rep, "numSamples", numSamples, 'results.csv', sep="_"
+  )))
   gc()
   return(res.df)
 }
