@@ -43,7 +43,7 @@ simulateAndWriteFragments <- function(YY, force = FALSE){
     y = YY[[2]]
     locPeaks <- YY[[3]]
 
-    fileName = paste('SimulatedFragments2/SimulatedData_CellNumber',  cellNum2, 'Round',y, sep = '_')
+    fileName = paste('SimulatedFragments/SimulatedData_CellNumber',  cellNum2, 'Round',y, sep = '_')
     #existingFiles <- list.files(pattern = paste("^",gsub(".*/","", fileName), ".csv", sep =''), recursive = TRUE)
     fragTmp <- MOCHA::simulateFragments(nCells = cellNum2, meanFragsPerCell = 4000, fragThreshold = 1000, 
                                             allLocationsGR = locPeaks, FRIP = 0.95, meanLengths = c(75, 200), 
@@ -85,7 +85,7 @@ studySignal <-  4000
 study_prefactor <- 3668 / studySignal
 
 
-csvDir <- "/home/jupyter/scMACS_Analysis/simulatedData/SimulatedFragments2"
+csvDir <- "/home/jupyter/scMACS_Analysis/simulatedData/SimulatedFragments"
 
 globalNCores <- 1
 
@@ -224,6 +224,7 @@ sumDF <- data.frame(TruePositives = c(testResults(hPeaks,truePeaks, type = 'true
     )
 sumDF <- dplyr::mutate(sumDF, CellNumber = as.numeric(gsub("_Round.*|.*CellNumber_","", Sample)),
                        Iteration = as.numeric(gsub(".*Round_|_peaks","", Sample)))
+
 write.csv(sumDF, 'PeakCalls_AbsoluteCountSummary.csv')
 peakNumber = unique(lengths(truePeaks))
                               
@@ -339,143 +340,3 @@ ggplot(dplyr::filter(sumDF2, CellNumber > 50),
         geom_point() +  geom_smooth() + theme_bw()+ scale_x_log10() +
         ylab('F1 Score')+ ggtitle('Open Chromatin Model Performance Measured by F-Score') 
 dev.off()
-
-
-############################################################
-#      MACS2 at higher numbers
-############################################################
-
-library(MOCHA)
-library(BSgenome.Hsapiens.UCSC.hg38)
-library(parallel)
-
-cellNumber = c(100, 200, 500, 1000, 2000, 3000, 5000, 10000, 50000)
-iteration1 = c(12:14)
-
-grid <- expand.grid(cellNumber, iteration1)
-                              
-
-cl = parallel::makeCluster(35)
-
-parallel::clusterEvalQ(cl, {
-        library('BSgenome.Hsapiens.UCSC.hg38')
-    library('GenomicRanges')
-    library(MOCHA)
-      })
-
-
-truePeaks1 <- readRDS('TruePeakSet.rds')[[1]]
-                        
-#Make into a list and join with truePeakList
-iterList1 <- split(grid,seq(nrow(grid)))
-iterList2 <- mapply(append, iterList1, list(truePeaks1) , SIMPLIFY=FALSE)
-
-pbapply::pblapply(cl = cl, X = iterList2, simulateAndWriteFragments)
-
-simulateAndWriteFragments <- function(YY, force = FALSE){
-    cellNum2 = as.numeric(YY[[1]])
-    y = YY[[2]]
-    locPeaks <- YY[[3]]
-
-    fileName = paste('SimulatedFragments2/SimulatedData_CellNumber',  cellNum2, 'Round',y, sep = '_')
-    #existingFiles <- list.files(pattern = paste("^",gsub(".*/","", fileName), ".csv", sep =''), recursive = TRUE)
-    fragTmp <- MOCHA::simulateFragments(nCells = cellNum2, meanFragsPerCell = 4000, fragThreshold = 1000, 
-                                            allLocationsGR = locPeaks, FRIP = 0.95, meanLengths = c(75, 200), 
-                                            lengthProbability = c(0.9, 0.1))
-            
-        
-    write.csv(as.data.frame(fragTmp), paste(fileName,'.csv', sep = ''))
-    rm(fragTmp)
-  
-}
-
-stopCluster(cl)
-gc()
-
-studySignal <-  4000
-study_prefactor <- 3668 / studySignal
-
-csvDir <- "/home/jupyter/scMACS_Analysis/simulatedData/SimulatedFragments2"
-
-globalNCores <- 1
-
-# Generate coverage bedgraphs from simulated data up front
-# for MACS2 and HOMER
-
-covFileBedGraphList2 <- mclapply(mc.cores =10, X = split(grid,seq(nrow(grid))), function(XX){
-  cellNumber <- as.numeric(XX[1])
-  frip <- XX[2]
-
-  popFrags <- getSimulatedFrags(cellNumber, frip, csvDir)
-  covFileBedGraph <- newExportFragsList(popFrags, cellNumber, frip, TxDb)
-  print(covFileBedGraph)
-    gc()
-  covFileBedGraph
-})
-                              
-macs2OutDir <- "./macs2__simulations_results"
-macs2_run_simulated(covFileBedGraphList2, rep = 1, macs2OutDir)
-
-globalNCores <- 35
-                              
-macsFiles2 <- grep("^macs2__simulations_results/", list.files(pattern = '.broadPeak', recursive = TRUE), value = TRUE)
-macsFiles2 <- grep('12|13|14', macsFiles2, value = TRUE)
-mPeaks2 <- pbapply::pblapply(cl = 10, X = macsFiles2, function(XX){
-
-    tmp1 <- read.table(XX)
-    colnames(tmp1) = c('seqnames', 'start', 'end', 
-                'File', 'Num1', 'Num2', 'Num3', 'Num4', 'Num5')
-    tilePeaks(tmp1, blackList)
-
-    })
-names(mPeaks2) <- gsub(".broadPeak|^macs2__simulations_results/", "", sub(".*_results/", "", macsFiles2))
-saveRDS(mPeaks2, 'ProcessedPeaks_MACS2_v3.rds')
-
-truePeaks2 <- MOCHA::GRangesToString(plyranges::filter(truePeaks1, isPeak))
-
-## Let's calculate the accuracy rate
-testResults2 <- function(newPeaks, truePeaks, type = 'truePos'){
-
-    subNames <- paste(gsub("_peaks", "", gsub(".*Round", "Round", names(newPeaks))), "$", sep = '')
-    allOut <- unlist(mclapply(mc.cores = 10, seq_along(newPeaks), function(x){
-        
-        whichTrue <- truePeaks2
-        if(type == 'truePos'){
-             sum(MOCHA::GRangesToString(newPeaks[[x]]) %in% whichTrue)
-        }else if(type == 'falsePos'){
-            sum(!MOCHA::GRangesToString(newPeaks[[x]]) %in% whichTrue)
-
-        }else if(type == 'falseNeg'){
-            sum(!whichTrue %in% MOCHA::GRangesToString(newPeaks[[x]]))
-        }
-        }))
-        gc()
-    return(allOut)
-}
-                              
-sumDF3 <- data.frame(TruePositives = testResults2(mPeaks2, truePeaks2, type = 'truePos'),
-           FalseNegatives =  testResults2(mPeaks2, truePeaks2, type = 'falseNeg'),
-           FalsePositives = testResults2(mPeaks2, truePeaks2, type = 'falsePos'),
-            totalOpenTiles = lengths(mPeaks2),
-            Sample =  names(mPeaks2),
-            Method = rep('MACS2', length(mPeaks2))
-    ) %>%
-    dplyr::mutate(CellNumber = as.numeric(gsub("_Round.*|.*CellNumber_","", Sample)),
-                       Iteration = as.numeric(gsub(".*Round_|_peaks","", Sample))) %>%
-     dplyr::mutate(Precision = TruePositives/totalOpenTiles, 
-                        Recall = 1 - FalseNegatives/(length(truePeaks2)),
-                        FalsePositivesRate = FalsePositives/totalOpenTiles) %>%
-        dplyr::mutate(F1 = 2*(Precision * Recall)/(Precision + Recall)) %>%
-        tidyr::pivot_longer(cols = c('totalOpenTiles', 'TruePositives', 'FalsePositives', "FalseNegatives",
-                                      'Precision', 'Recall', 'FalsePositivesRate', 'F1'), 
-                    names_to = 'Metric', values_to = 'PeakNumber')
-pdf('SimulatedResults_MACS2_BulkCellNumbers.pdf')
-                              
-ggplot(dplyr::filter(sumDF3, Metric %in% c('F1', "Recall", 'FalsePositiveRate', 'totalOpenTiles')), 
-       aes(x = CellNumber, y = PeakNumber, color = Method, linetype = Method,
-           shape = Method, group = Method)) + 
-        geom_point() + geom_smooth() + theme_bw() + scale_x_log10() + 
-        facet_wrap(~ Metric, nrow = 2, ncol = 2, scales = 'free_y') 
-                              
-dev.off()
-
