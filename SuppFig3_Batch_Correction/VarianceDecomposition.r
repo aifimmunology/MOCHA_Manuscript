@@ -3,6 +3,7 @@ library(MOCHA)
 library(SummarizedExperiment)
 library(tidyverse)
 library(plyranges)
+library(lme4)
 setwd('COVID_scATAC_Manuscript')
 
 STM <- readRDS('CD16_Full_SampleTileMatrix.rds')
@@ -44,13 +45,13 @@ runDecomposition <- function(metaData, countMat, variableList, numCores = 1){
 }
            
 i = 'CD16 Mono'
-accMat <- getCellPopMatrix(STM, i, NAtoZero = TRUE)
+accMat <- getCellPopMatrix(STM[,!is.na(STM$days_since_symptoms)], i, NAtoZero = TRUE)
 accMat2 <- log2(accMat+1)
 
-metaData <- STM@colData
+metaData <- STM[,!is.na(STM$days_since_symptoms)]@colData
 
 ## Look for regions that are 80% non-zeros within at least one infection stage
-listReg <- group_by(as.data.frame(metaData), Stage) %>% summarize(SampleList = list(Sample)) 
+listReg <- group_by(as.data.frame(metaData), InfectionStages) %>% summarize(SampleList = list(Sample)) 
 strongPeaks <- unique(unlist(lapply(listReg$SampleList, function(x){
     
     which(apply(accMat2[,x], 1, function(x){ sum(x !=0)/length(x) >= 0.8 }))
@@ -58,7 +59,7 @@ strongPeaks <- unique(unlist(lapply(listReg$SampleList, function(x){
 })))
 
 deComp <- runDecomposition(metaData, accMat2[strongPeaks,], 
-                    variableList = c('Age', 'Sex', 'days_since_symptoms','AIFI.Batch'),
+                    variableList = c('Age', 'Sex', 'days_since_symptoms','PTID'),
                                numCores = 60)
 write.csv(deComp, 'CD16_Mono_VarianceDecomposition.csv')
 
