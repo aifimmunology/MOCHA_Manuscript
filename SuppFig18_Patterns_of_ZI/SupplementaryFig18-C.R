@@ -233,3 +233,92 @@ mean(res2$NB2_Pvalue < 0.05)),2)
 ## CD16 monocytes
 round(c(mean(res3$NB1_Pvalue < 0.05),
   mean(res3$NB2_Pvalue < 0.05)),2)
+
+### calculate statistics for 
+### for quantifying number of 
+### tiles with p < 0.05 
+res1 = fread('cd4 naive res.csv')
+res2 = fread('b naive res.csv')
+res3 = fread('cd16 mono res.csv')
+
+## CD4 Naive T Cell
+round(c(mean(res1$NB1_Pvalue < 0.05 & res1$NB1_Statistic >=1),
+mean(res1$NB2_Pvalue < 0.05 & res1$NB2_Statistic >=1)),2)
+
+## Naive B cells
+round(c(mean(res2$NB1_Pvalue < 0.05 & res2$NB1_Statistic >=1),
+mean(res2$NB2_Pvalue < 0.05 & res2$NB2_Statistic >=1)),2)
+
+## CD16 monocytes
+round(c(mean(res3$NB1_Pvalue < 0.05 & res3$NB1_Statistic >=1),
+mean(res3$NB2_Pvalue < 0.05 & res3$NB2_Statistic >=1)),2)
+
+cd16 <- read.csv('cd16 mono res.csv')[,-1]
+cd4 <- read.csv('cd4 naive res.csv')[,-1]
+bnaive <- read.csv('b naive res.csv')[,-1]
+
+pdf('SupplementalFigure18_ZeroInflation.pdf')
+
+lapply(list(cd16, cd4, bnaive), function(XX){
+    
+    p1 <- ggplot(XX,
+           aes(x=NB1_Pvalue))+geom_histogram() +
+            ggtitle('Negative Binom1 Distribution')+
+                geom_vline(xintercept = 0.05, color = 'red') + theme_bw() +
+                ylab('Counts') + xlab('P-value')
+    
+    p2 <- ggplot(XX,
+               aes(x=NB2_Pvalue))+geom_histogram()+
+                ggtitle('Negative Binom2 Distribution') +
+                geom_vline(xintercept = 0.05, color = 'red') + theme_bw()+
+                ylab('Counts') + xlab('P-value')
+    
+    nb1 <- dplyr::mutate(XX, Group = 
+        ifelse(NB1_Statistic > 1, 'Overinflated', 'Underinflated')) %>%
+        dplyr::group_by(Group) %>%
+        dplyr::filter(NB1_Pvalue < 0.05) %>%
+        dplyr::summarize(TileNum = dplyr::n())
+    nb2 <- dplyr::mutate(XX, Group = 
+        ifelse(NB2_Statistic > 1, 'Overinflated', 'Underinflated')) %>%
+        dplyr::group_by(Group) %>%
+        dplyr::filter(NB2_Pvalue < 0.05) %>%
+        dplyr::summarize(TileNum = dplyr::n())
+    
+    if(any(!grepl('Under', nb1$Group))){
+        nb1 <- rbind(nb1, data.frame(Group = 'Underinflated', TileNum = 0))
+    }
+    if(any(!grepl('Under', nb2$Group))){
+        nb2 <- rbind(nb2, data.frame(Group = 'Underinflated', TileNum = 0))
+    }
+    nb2$Group = factor(nb2$Group, levels = c('Underinflated', 'Overinflated'))
+    nb1$Group = factor(nb1$Group, levels = c('Underinflated', 'Overinflated'))
+    
+    p3 <- ggplot(nb1, aes(x = Group, y = TileNum)) +
+            geom_col() + theme_bw() + ylab('Number of Tiles') + xlab(NULL) +
+        ggtitle('Under- vs Over-inflation of Zeroes')
+    
+    p4 <- ggplot(nb2, aes(x = Group, y = TileNum)) +
+            geom_col() + theme_bw() + ylab('Number of Tiles') + xlab(NULL) +
+        ggtitle('Under- vs Over-inflation of Zeroes')
+    
+    list(p1, p2, p3, p4)
+    
+    })
+  
+dev.off()
+
+lapply(list(cd16, cd4, bnaive), function(XX){
+    
+       nb1 <- dplyr::mutate(XX, Group = 
+        ifelse(NB1_Statistic > 1, 'Overinflated', 'Underinflated')) %>%
+        dplyr::group_by(Group) %>%
+        dplyr::filter(NB1_Pvalue < 0.05) %>%
+        dplyr::summarize(TileNum = dplyr::n())
+    nb2 <- dplyr::mutate(XX, Group = 
+        ifelse(NB2_Statistic > 1, 'Overinflated', 'Underinflated')) %>%
+        dplyr::group_by(Group) %>%
+        dplyr::filter(NB2_Pvalue < 0.05) %>%
+        dplyr::summarize(TileNum = dplyr::n())
+    list(nb1, nb2)
+    
+    })
