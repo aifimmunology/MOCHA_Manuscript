@@ -204,7 +204,7 @@ pdf('/home/jupyter/MOCHA_Revision/batch_effect_by_normalization.pdf', height=24,
 p= ggplot(total_ints,
        aes(x=Batch,
            y=V1,
-          fill=V2))+geom_point()+geom_boxplot()+facet_wrap(V2~Count, ncol=2 )+
+          fill=V2))+geom_boxplot()+geom_point()+facet_wrap(V2~Count, ncol=2 )+
 theme_minimal()+
 theme(axis.text.x=element_text(size=10, angle=90),
      text=element_text(size=12))+
@@ -212,3 +212,6 @@ ylab('Number of total Fragments by Sample')+
 ggtitle('Comparison of total fragments by sample Pre and Post Normalization')
 print(p)
 dev.off()
+
+write.csv(total_ints,
+          file='/home/jupyter/MOCHA_Revision/source_data_batch_effects.csv')
