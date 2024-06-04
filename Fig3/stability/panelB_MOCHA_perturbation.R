@@ -61,8 +61,8 @@ tileResults <- callOpenTiles(
     ArchRProj,
     cellPopLabel = "CellSubsets" ,
     cellPopulations = "CD16 Mono",
-    TxDb = TxDb,
-    Org = Org,
+    TxDb = "TxDb.Hsapiens.UCSC.hg38.refGene",
+    Org = "org.Hs.eg.db",
     numCores = 20,
     studySignal = studySignal
 )
@@ -76,13 +76,11 @@ tileResults <- callOpenTiles(
 #    primary input to downstream analyses.
 ###########################################################
 
-SampleTileMatrices <- scMACS::getSampleTileMatrix( 
+SampleTileMatrices <- getSampleTileMatrix( 
     tileResults,
     cellPopulations = "CD16 Mono",
     groupColumn = "COVID_status",
-    threshold = 0.2,
-    NAtoZero = TRUE,
-    log2Intensity = TRUE
+    threshold = 0.2
 )
 
 ###########################################################
