@@ -1,16 +1,14 @@
 #################################################################
 #################################################################
 ###
-### Script: cd16_scMACS_comparison
+### Script: 
 ### Description: Conducts venn diagrams
 ###              and peak quality comparisons 
-### Author: Samir Rachid Zaim, PhD
 ###
 #################################################################
 #################################################################
 
 ## Load Libraries
-require(scMACS)
 require(data.table)
 require(VennDiagram)
 require(ggplot2)
@@ -83,65 +81,7 @@ seurat$Peak = seurat_tiles
 
 #################################################################
 #################################################################
-
-#################################################################
-#################################################################
-
-calculateMeanDiff <- function(tmp_mat, group){
-    
-    a = log2(tmp_mat[, which(group==1)+1, with=F]+1)
-    b = log2(tmp_mat[, which(group==0)+1, with=F]+1)
-    
-    mean_diff = rowMeans(a) - rowMeans(b)
-    mean_diff  
-}
-
-calculateMeanDiff2 <- function(tmp_mat, group){
-    
-    a = log2(tmp_mat[, which(group==1)+1, with=F]+1)
-    b = log2(tmp_mat[, which(group==0)+1, with=F]+1)
-    
-    a[a==0] <- NA
-    b[b==0] <- NA
-    
-    mean_diff = rowMeans(a, na.rm=T) - rowMeans(b, na.rm=T)
-    mean_diff  
-}
-
-
-
-
-
-common = intersect(intersect(seurat$Peak, scmacs$Peak), archr$Peak)
-union =  union(union(seurat$Peak, scmacs$Peak), archr$Peak)
-
-unique_archr = setdiff(archr$Peak, union(seurat$Peak, scmacs$Peak))
-
-
-unique_scmacs = setdiff(scmacs$Peak, union(seurat$Peak, archr$Peak))
-
-
-
-unique_seurat= setdiff(seurat$Peak, union(archr$Peak, scmacs$Peak))
-
-
-
-
-unique_archr <- twoPart[Peak %in% unique_archr]; unique_archr$Model='ArchR'
-unique_archr$MeanDiff = calculateMeanDiff2(tileMatrix[tileID %in% unique_archr$Peak], group)
-
-unique_scmacs <- twoPart[Peak %in% unique_scmacs];unique_scmacs$Model='scMACS'
-unique_scmacs$MeanDiff = calculateMeanDiff2(tileMatrix[tileID %in% unique_scmacs$Peak], group)
-
-unique_seurat <- twoPart[Peak %in% unique_seurat];unique_seurat$Model='Seurat'
-unique_seurat$MeanDiff = calculateMeanDiff2(tileMatrix[tileID %in% unique_seurat$Peak], group)
-
-
-df = rbind(unique_archr,unique_scmacs,
-           unique_seurat)
-
-df$DiffRho = df$Case_rho - df$Control_rho
-           
+         
 library(VennDiagram)
 setwd('../../figure3')
 # Prepare a palette of 3 colors with R colorbrewer:
@@ -183,120 +123,4 @@ venn.diagram(
         cat.fontfamily = "sans",
         rotation = 1
 )    
-
-df$Model[df$Model=='Seurat'] <-'Signac'
-df$Model[df$Model=='scMACS'] <-'MOCHA'
-
-    
-df$MedianDiff = df$Case_mu - df$Control_mu
-df$AvgIntensity = (df$Case_mu + df$Control_mu)/2
-
-# ## Volcano plot 
-png('panelD_qualitative.png')
-df$Model = factor(df$Model,
-                  levels=c('MOCHA', 'ArchR','Signac'))
-ggplot(df,
-       aes(x=MeanDiff,
-           y= abs(DiffRho),
-          col=Model))+
-geom_point(size=1) +
-facet_wrap(~Model, ncol=1)+
-scale_color_manual(values = c('MOCHA'= 'blue',
-                              'ArchR' = 'red',
-                              'Signac'= 'green'))+ThemeMain+
-xlab('Mean Intensity Difference') + ylab('Difference in Proportion of 0s')+
-xlim(-3,3)+
-
-theme(legend.position='none')
-dev.off()
-
-#################################################################
-## quantify regions
-## for qualitative analyses 
-
-df[abs(DiffRho)>0.5, .N, by=Model]
-df[(MeanDiff)> 0 & abs(DiffRho) < 0.5, .N, by=Model]
-df[(MeanDiff)< 0 & abs(DiffRho) < 0.5, .N, by=Model]
-
-
-#################################################################
-#################################################################
-
-### Plot Unique Regions 
-### By Each Method
-require(ggpubr)
-unique_scmacs = unique_scmacs[order(unique_scmacs$P_value,
-                                    decreasing=F),]
-unique_archr = unique_archr[order(unique_archr$P_value,
-                                    decreasing=F),]
-unique_seurat = unique_seurat[order(unique_seurat$P_value,
-                                    decreasing=F),]
-### get top regions 
-plot_top_regions <- function(peaks, fname){
-    
-        p_list <- lapply(1:5,
-                         function(x) 
-                             plot_differential_region(tileMatrix, 
-                                                      tileID=peaks[x],
-                                                      group)
-                         )
-    
-        png(fname, width=1200, height=400)
-
-        p = ggarrange(plotlist=p_list,
-               ncol=5)
-        print(p)
-        dev.off()
-    
-    }
-
-### Get top 5 regions 
-plot_top_regions(unique_scmacs$Peak[1:5], fname='panelE_MOCHA_top.png')
-plot_top_regions(unique_archr$Peak[1:5], fname='panelE_archr_top.png')
-plot_top_regions(unique_seurat$Peak[1:5], fname='panelE_signac_top.png')
-
-#################################################################
-#################################################################
-
-### calculate CV on the peaks 
-tM = tileMatrix[,2:ncol(tileMatrix)]
-tM = log2(tM+1)
-
-tM = tM[tileMatrix$tileID %in% scmacs$Peak]
-
-calculate_CV <- function(tM, removeZeroes=F){
-    
-    ## transform Zeroes To Nas 
-    if(removeZeroes){
-        tM[tM==0] <- NA   
-    }
-    
-    ## transform to matrix
-    tM = as.matrix(tM)
-    
-    ## calculate mean & sd vectors 
-    mu_vec = rowMeans(tM, na.rm=T)
-    sd_vec = rowSds(tM, na.rm=T)
-    
-    ## return coefficient of variation
-    CVs = sd_vec / mu_vec
-    return(CVs)
-    
-}
-cvAll = calculate_CV(tM, F)
-cvNonzeroes=calculate_CV(tM, T)
-
-png('CVs.png')
-
-par(mfrow=c(2,1))
-hist(cvAll, main='CV All values',xlab='CV', breaks=50)
-hist(cvNonzeroes, main='CV Nonzero values',xlab='CV', breaks=50)
-dev.off()
-
-scmacs$CV = cvAll
-scmacs$CVNonzero=cvNonzeroes
-
-write.csv(scmacs,
-          file='cd16_daps_withCV.csv',
-          row.names=F)
 
