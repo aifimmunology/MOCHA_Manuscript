@@ -1,6 +1,6 @@
 # ###############################################################
 # ###############################################################
-# ## aggregate results 
+# ## aggregate results for healthy donor analyses
 
 ## load libraries 
 require(parallel)
