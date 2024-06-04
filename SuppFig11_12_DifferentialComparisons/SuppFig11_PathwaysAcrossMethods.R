@@ -1,4 +1,4 @@
-    ]]]]]]]library(ArchR)
+library(ArchR)
 library(TxDb.Hsapiens.UCSC.hg38.refGene)
 library(org.Hs.eg.db)
 library(tidyverse)
@@ -76,7 +76,7 @@ allORA <- lapply(enrichDataBaseList$name[dblist], function(y) {
 
 names(allORA) <- enrichDataBaseList$name[dblist]
 
-saveRDS(allORA, "Figure3_DATs_Pathways.rds")
+saveRDS(allORA, "SuppFig11_DATs_Pathways.rds")
 
 # MOCHA_Pathways <- lapply(enrichDataBaseList$name[dblist], function(y) {
 #   mocha_path <- allORA[[y]][[1]]

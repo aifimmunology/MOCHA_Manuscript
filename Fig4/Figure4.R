@@ -240,7 +240,7 @@ altTSSReactome$description = factor(altTSSReactome$description, levels = unique(
                                   
 write.csv(altTSSReactome, 'AltTSS_Pathways.csv')
           
-pdf('Fig4_B.pdf')
+pdf('Fig4_Pathways.pdf')
 
 
 ggplot(altTSSReactome, aes(x = description,40,
@@ -262,7 +262,7 @@ geneList <- c('CAPN1','ARHGAP9','NFKB1', 'SOCS3', 'P2RY6', 'IFI16')
 
 STM <- readRDS('CD16_SampleTileObj.rds')
 
-pdf('Fig4D.pdf')
+pdf('Fig4_GeneTracks.pdf')
 
 for(i in 1:length(geneList)){
     
