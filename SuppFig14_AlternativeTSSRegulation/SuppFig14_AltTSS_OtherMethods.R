@@ -105,7 +105,7 @@ d2 <- ggVennDiagram::process_data(Venn(allAltPathways))
                                   
 
 ### Plot all of it
-pdf('SuppFigX_AltTSS_otherMethods.pdf')
+pdf('SuppFig14_AltTSS_otherMethods.pdf')
 ggplot(altGenes, aes(x = factor(Method, levels = c('Mocha','ArchR', 'Signac')), y = AltGeneNumber, fill = Method)) + geom_col() + scale_fill_MOCHA() + xlab('Method') + ylab('Number of Genes with Alternative TSS Regulation') +
 theme_bw() + theme(legend.position = 'none') + ggtitle('Number of Genes with alternative TSS Regulation by Method')
 
