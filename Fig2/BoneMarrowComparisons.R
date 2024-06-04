@@ -1,8 +1,4 @@
-# ###################################################
-# 0. Load libraries, ArchR project, and annotation
-#    databases. Optionally filter the ArchR project
-#    to a subset of samples.
-# ###################################################
+### Figure 2 summaries for Haematopoiesis dataset
 
 # install.packages("remotes")
 # remotes::install_github("wcstcyx/TxDb.Hsapiens.UCSC.hg19.refGene")
