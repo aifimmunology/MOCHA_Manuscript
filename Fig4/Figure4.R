@@ -71,7 +71,7 @@ allTSSReactome$description = factor(allTSSReactome$description, levels = unique(
 write.csv(allTSSReactome, 'SuppDataFile2_allTSS_Differential_ReactomePathways.csv')                           
                         
                         
-pdf('SuppFig6_A.pdf')
+pdf('Fig4_Pathways.pdf')
 
 ggplot(allTSSReactome, aes(x = description,
                            y = enrichmentRatio, fill = FDR)) +
@@ -108,7 +108,7 @@ enrichDAP_df2 <- enrichDAP_df  %>%
                 dplyr::mutate(TranscriptionFactor = gsub("_.*", "", rownames(.))) %>%
                  dplyr::mutate(label = ifelse(adjp_val < 0.05, TranscriptionFactor, NA)) 
 
-pdf('SuppFig6_B.pdf')
+pdf('Fig4_Motifs.pdf')
 
     ggplot(enrichDAP_df2, aes(x = enrichment, y = -log10(adjp_val), label = label)) + 
         geom_point() + theme_bw() + 
