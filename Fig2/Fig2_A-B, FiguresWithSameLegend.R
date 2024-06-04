@@ -1,14 +1,12 @@
 # ##################################################################################
 # ##################################################################################
 
+## regenerate Fig2-AB for same axes
 require(ggplot2)
 require(dplyr)
 require(data.table)
 
-
-
 cellCounts = data.table(readxl::read_xlsx('MOCHA_Manuscript2/Fig2/SourceData_Figure2-1.xlsx'))
-
 
 pdf('MOCHA_Manuscript2/Fig2/cell_counts.pdf',
     width=20, height=4)
