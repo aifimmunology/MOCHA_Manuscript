@@ -1,5 +1,4 @@
-#### Code for generating Figure 4 results and plots
-### Additional supporting function are placed at the very end. 
+#### Code for generating Figure 3 results and plots
 
 library(ArchR)
 library(MOCHA)
