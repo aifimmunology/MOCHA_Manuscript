@@ -45,7 +45,7 @@ setwd('/home/jupyter/covid/scMACS_manuscript_analyses/sample_specific_analyses/'
 setwd('dap_cd16')
 archr=fread('CD16_DAPs_ArchR_on_scMACSTiles.csv')
 seurat = fread('Seurat_204K_PeaksTest.csv')
-scmacs = fread('cd16_scmacs.csv')
+mocha = fread('cd16_scmacs.csv')
 
 
 setwd('../daps/backup')
@@ -90,7 +90,7 @@ myCol <- c('blue','green','red')
 
 # Chart
 venn.diagram(
-        x = list(scmacs$Peak, 
+        x = list(mocha$Peak, 
                  seurat$Peak, 
                  archr$Peak),
         category.names = c("MOCHA" , "Signac" , "ArchR"),
