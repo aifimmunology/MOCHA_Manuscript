@@ -69,8 +69,8 @@ tileResults <- callOpenTiles(
     ArchRProj,
     cellPopLabel = "CellSubsets" ,
     cellPopulations = cellPopulations,
-    TxDb = TxDb,
-    Org = Org,
+    TxDb = 'TxDb.Hsapiens.UCSC.hg38.refGene',
+    Org = 'org.Hs.eg.db',
     numCores = 20,
     studySignal = studySignal,
     outDir=NULL
