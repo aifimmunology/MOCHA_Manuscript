@@ -4,7 +4,7 @@
 #    to a subset of samples.
 # ###################################################
 
-library(scMACS)
+library(MOCHA)
 library(ArchR)
 library(TxDb.Hsapiens.UCSC.hg38.refGene)
 library(org.Hs.eg.db)
@@ -51,8 +51,8 @@ tileResults <- callOpenTiles(
     ArchRProj,
     cellPopLabel = cellPopLabel,
     cellPopulations = cellPopulations,
-    TxDb = TxDb,
-    Org = Org,
+    TxDb = 'TxDb.Hsapiens.UCSC.hg38.refGene',
+    Org = 'org.Hs.eg.db',
     numCores = 20,
     studySignal = studySignal,
     outDir=NULL
