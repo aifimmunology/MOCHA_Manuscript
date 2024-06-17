@@ -7,7 +7,7 @@
 setwd('/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow')
 ## load libraries 
 require(MOCHA)
-require(ggpubr)
+# require(ggpubr)
 require(UpSetR)
 require(data.table)
 require(ggplot2)
@@ -19,7 +19,7 @@ source('../helper_granges.R')
 source('../utils.R')
 require(parallel)
 
-homeDir = '/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow'
+homeDir = '/home/jupyter/MOCHA_Manuscript2/Fig2/BoneMarrow'
 setwd(homeDir)
 
 # # Identify Cell populations
@@ -54,7 +54,7 @@ Org <- org.Hs.eg.db
 ################################################################
 ### load MOCHA Tiles 
 tileResults <- readRDS('MOCHA.RDS')
-datasetDir='/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow/results'
+datasetDir='/home/jupyter/MOCHA_Manuscript2/Fig2/BoneMarrow/results'
 setwd(datasetDir)
 # ###############################################################
 # ###############################################################
@@ -76,17 +76,21 @@ cells_per_sample$CellSubsets = factor(cells_per_sample$predictedGroup,
 
 extract_tiles <- function(i){
     setwd(homeDir)
+
     #### Extract MOCHA tiles 
     subsetTileResults <- tileResults[[cells[i]]]
-
-    sampleTileMatrix <- RaggedExperiment::compactAssay(subsetTileResults, i='peak')
-    
-    MOCHA_tileList <- mclapply(1:ncol(sampleTileMatrix),
-                               function(x)
-                                   sample_specific_rowRanges(sampleTileMatrix[,x]),
-                               mc.cores=20
-                               )
     tsam <- RaggedExperiment::compactAssay(subsetTileResults, i='TotalIntensity')
+    tsam = data.frame(tsam[, which(colnames(tsam)==cells[i])])
+
+    ### 
+    subsetTileResults <- subsetTileResults@assays[[grep(cells[i], 
+                                                        names(subsetTileResults@assays))]]
+                                                 
+    
+    MOCHA_tileList <- list(subsetTileResults)
+
+    sampleTileMatrix <- as.data.table(subsetTileResults)
+
     ################################################################
     ################################################################
     ### 
@@ -134,6 +138,8 @@ extract_tiles <- function(i){
     mocha_gr <- makeGRangesFromDataFrame(MOCHA_tileList[[1]], 
                                          keep.extra.columns=T)
     
+    mocha_gr = mocha_gr[mocha_gr$peak==T]
+    
     macs2_gr <- makeGRangesFromDataFrame(macs2_tile_list2, 
                                          keep.extra.columns=T)
     
@@ -145,7 +151,7 @@ extract_tiles <- function(i){
     tilesPerMethod<- data.table(
                 MACS2 = nrow(macs2_tile_list2),
                 HOMER = nrow(homer_peak_list2),
-                MOCHA = colSums(sampleTileMatrix, na.rm=T)
+                MOCHA = length(mocha_gr)
             )
     tilesPerMethod$CellPopulation = cells[i]
 
@@ -179,9 +185,6 @@ extract_tiles <- function(i){
     ################################################################
     ################################################################
     
-    ### convert objects to Granges
-    mocha_gr <- makeGRangesFromDataFrame(MOCHA_tileList[[1]], 
-                                         keep.extra.columns=T)
     
     macs2_gr <- makeGRangesFromDataFrame(macs2_tile_list2, 
                                          keep.extra.columns=T)
@@ -239,8 +242,8 @@ extract_tiles <- function(i){
     ### missed lambda
     missedLambda= tsam[row.names(tsam) %in% macs2_homer_gr$tileID[mocha_missed_idx],]                  
     ### all three 
-    all3Lambda= tsam
-    names(all3Lambda) = row.names(tsam)
+    #all3Lambda= tsam
+    #names(all3Lambda) = row.names(tsam)
      
     ################################################################
     ################################################################
@@ -261,8 +264,7 @@ extract_tiles <- function(i){
                 TileTypesAllThree = common_three_tileType,
                 TileTypesMissedMOCHA=mocha_missed_tileType,
                 MochaUnique_lambda=unique_lambda,
-                MochaMissed_lambda= missedLambda,
-                All3Lambda=all3Lambda
+                MochaMissed_lambda= missedLambda
 
     )
     
@@ -279,7 +281,7 @@ tileCountsPerMethod_list = lapply(1:3,
 
 model_levels <- c('MACS2','HOMER','MOCHA')
 
-setwd('/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow/results')
+setwd('/home/jupyter/MOCHA_Manuscript2/Fig2/BoneMarrow/results')
 
 #### plot results by method 
 tiles <- rbindlist(lapply(tileCountsPerMethod_list,
@@ -394,55 +396,55 @@ summarize_ctcf_tss <- function(tss){
 summarize_ctcf_tss(tss) 
 summarize_ctcf_tss(ctcf_res) 
 
-################################################################                    ################################################################
-promoter <- rbindlist(lapply(tileCountsPerMethod_list,
-                function(x)
-                    x$Promoter
-                             )
-                     )
-promoter$CellPopulation = factor(promoter$CellPopulation,
-                            levels=cell_levels)
-promoter$variable <- factor(promoter$variable,
-                       levels=model_levels)
+# ################################################################                    ################################################################
+# promoter <- rbindlist(lapply(tileCountsPerMethod_list,
+#                 function(x)
+#                     x$Promoter
+#                              )
+#                      )
+# promoter$CellPopulation = factor(promoter$CellPopulation,
+#                             levels=cell_levels)
+# promoter$variable <- factor(promoter$variable,
+#                        levels=model_levels)
                           
 
-promoter_plot <- ggplot(promoter,
-       aes(x=reorder(CellPopulation, value, median),
-           y=value,
-           fill=variable))+
-                          geom_bar(stat='identity', position='dodge')+
-     scale_fill_MOCHA()+
-                        theme(text=element_text(size=15),
-                             axis.text.x=element_text(size=15, angle=90))+
-                              xlab('')+
-        ggtitle('Promoters')
+# promoter_plot <- ggplot(promoter,
+#        aes(x=reorder(CellPopulation, value, median),
+#            y=value,
+#            fill=variable))+
+#                           geom_bar(stat='identity', position='dodge')+
+#      scale_fill_MOCHA()+
+#                         theme(text=element_text(size=15),
+#                              axis.text.x=element_text(size=15, angle=90))+
+#                               xlab('')+
+#         ggtitle('Promoters')
       
           
 
-################################################################                    ################################################################
-distals <- rbindlist(lapply(tileCountsPerMethod_list,
-                function(x)
-                    x$TileDistributions
-                            )
-                    )
+# ################################################################                    ################################################################
+# distals <- rbindlist(lapply(tileCountsPerMethod_list,
+#                 function(x)
+#                     x$TileDistributions
+#                             )
+#                     )
 
-distals$CellPopulation = factor(distals$CellPopulation,
-                            levels=cell_levels)
-distals$variable <- factor(distals$variable,
-                       levels=model_levels)
+# distals$CellPopulation = factor(distals$CellPopulation,
+#                             levels=cell_levels)
+# distals$variable <- factor(distals$variable,
+#                        levels=model_levels)
                           
-pdf('distal.pdf')
-ggplot(distals[variable=='MOCHA'],
-       aes(x=CellPopulation,
-           y=value,
-           fill=tileType))+
-                          geom_bar(stat='identity', position='stack')+
-                        theme(text=element_text(size=15),
-                             axis.text.x=element_text(size=15, angle=90))+
-                              xlab('')+
-    ggtitle('MOCHA Tile Distributions')
+# pdf('distal.pdf')
+# ggplot(distals[variable=='MOCHA'],
+#        aes(x=CellPopulation,
+#            y=value,
+#            fill=tileType))+
+#                           geom_bar(stat='identity', position='stack')+
+#                         theme(text=element_text(size=15),
+#                              axis.text.x=element_text(size=15, angle=90))+
+#                               xlab('')+
+#     ggtitle('MOCHA Tile Distributions')
       
-dev.off()             
+# dev.off()             
           
 
 ################################################################           
