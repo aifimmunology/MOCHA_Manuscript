@@ -4,12 +4,15 @@
 #    to a subset of samples.
 # ###################################################
 
-library(scMACS)
+library(MOCHA)
 library(ArchR)
 #library(TxDb.Hsapiens.UCSC.hg38.refGene)
 #library(TxDb.Hsapiens.UCSC.hg19.refGene)
-BiocManager::install('BSgenome.Hsapiens.UCSC.hg19')
+#BiocManager::install('BSgenome.Hsapiens.UCSC.hg19') 
+#remotes::install_github("wcstcyx/TxDb.Hsapiens.UCSC.hg19.refGene")
+# BiocManager::install('BSgenome.Hsapiens.UCSC.hg19')
 library(BSgenome.Hsapiens.UCSC.hg19)
+library(TxDb.Hsapiens.UCSC.hg19.refGene)
 library(org.Hs.eg.db)
 
 
@@ -23,7 +26,7 @@ studySignal = median(metadata$nFrags)
 # and genome-wide annotation
 # Here our samples are human using hg38 as a reference.
 # For more info: https://bioconductor.org/packages/3.15/data/annotation/
-TxDb <- TxDb.Hsapiens.UCSC.hg38.refGene
+TxDb <- TxDb.Hsapiens.UCSC.hg19.refGene
 Org <- org.Hs.eg.db
 
 # ###################################################
@@ -48,16 +51,32 @@ numCores <- 30
 #    for all specified cell populations
 # ###################################################
 
+popFrags <- MOCHA::getPopFrags(ArchRProj,
+                               cellPopLabel = cellPopLabel,
+                               cellSubsets = cellPopulations,
+                               poolSamples=T,
+                               numCores= 20)
+
+meta = getCellColData(ArchRProj) 
+meta$Sample = meta$predictedGroup
+
+### rename fragment file names
+### to fit format 
+names(popFrags) <- c('10_cDC#10_cDC','12_CD14.Mono.2#12_CD14.Mono.2','20_CD4.N1#20_CD4.N1')
+
 tileResults <- callOpenTiles( 
-    ArchRProj,
+    ATACFragments = popFrags,
     cellPopLabel = cellPopLabel,
+    cellColData = meta,
     cellPopulations = cellPopulations,
-    TxDb = TxDb,
-    Org = Org,
-    numCores = 20,
+    genome = 'BSgenome.Hsapiens.UCSC.hg19',
+    blackList = getBlacklist(ArchRProj),
+    TxDb = 'TxDb.Hsapiens.UCSC.hg19.refGene',
+    Org = 'org.Hs.eg.db',
+    numCores = 30,
     studySignal = studySignal,
-    sampleSpecific=FALSE,
-    outDir=NULL
+    outDir='/home/jupyter/MOCHA_Manuscript/Fig2/BoneMarrow/old/',
+    verbose=T
 )
 
 saveRDS(tileResults,
@@ -71,9 +90,6 @@ res_sample = metadata[, .N,
 
 res_sorted = metadata[, .N, 
          by=list(new_cellType)]
-
-
-res = res[order(res$N, decreasing=F),]
          
 
 write.csv(table(metadata$Sample, metadata$new_cellType),
