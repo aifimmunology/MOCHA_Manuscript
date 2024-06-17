@@ -12,7 +12,7 @@
 # ###########################################################
 
 ## Load Libraries
-require(scMACS)
+require(MOCHA)
 require(ArchR)
 
 ## Load the ArchR Project
@@ -64,6 +64,7 @@ tileResults <- callOpenTiles(
     TxDb = "TxDb.Hsapiens.UCSC.hg38.refGene",
     Org = "org.Hs.eg.db",
     numCores = 20,
+    outDir =NULL,
     studySignal = studySignal
 )
 
@@ -112,7 +113,7 @@ differentials <- getDifferentialAccessibleTiles(
 
 fdr_threshold = 0.2
 nCores=50
-true_DAPs = differentials[FDR <= fdr_threshold]
+true_DAPs = differentials[differentials$FDR <= fdr_threshold,]
 samples = colnames(SampleTileMatrices)
 
 remove_one_sample <- function(xx){
@@ -122,7 +123,7 @@ remove_one_sample <- function(xx){
     tmp_STM = SampleTileMatrices[, !colnames(SampleTileMatrices) %in% xx]
 
     ### re-run differentials 
-    tmp_differentials <- getDifferentialAccessibleTiles(
+    tmp_differentials <- as.data.table(getDifferentialAccessibleTiles(
         SampleTileObj = tmp_STM,
         cellPopulation = "CD16 Mono",
         groupColumn = "COVID_status",
@@ -131,7 +132,7 @@ remove_one_sample <- function(xx){
         fdrToDisplay = 0.2,
         outputGRanges = FALSE,
         numCores = 50
-    )
+    ))
 
     tmp_differentials= tmp_differentials[FDR <= fdr_threshold]
     ### return final results 
@@ -255,7 +256,7 @@ row1 = data.frame(
 
 results3 = rbind(row1, results3)
 
-setwd('/home/jupyter/MOCHA_Manuscript/Fig3/panelB_Stability/')
+setwd('/home/jupyter/MOCHA_Manuscript/Fig3/panelF_Stability/')
 write.csv(results3,
           file='n-1.daps.MOCHA.csv',
          row.names=F)
