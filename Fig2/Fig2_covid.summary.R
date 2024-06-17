@@ -96,7 +96,7 @@ tiles$Model = factor(tiles$Model,
 
 pdf('TileCounts_h.pdf', width=6,height=2.5)
 ggplot(tiles,
-       aes(x=reorder(variable, value, median),
+       aes(x=reorder(Model, value, median),
            y=value,
           fill=variable))+geom_violin(scale='width')+
         scale_fill_MOCHA()+
@@ -104,7 +104,7 @@ ggplot(tiles,
     theme_minimal()+ylab('')+xlab('')+
   theme(legend.position='none',
           text=element_text(size=16),
-          strip.text.x=element_blank(),
+          #strip.text.x=element_blank(),
           axis.text.x=element_blank(),
                                axis.ticks.x=element_blank())
 

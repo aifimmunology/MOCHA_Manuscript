@@ -97,7 +97,7 @@ tiles$Model = factor(tiles$Model,
 
 pdf('TileCounts_h.pdf', width=6,height=2.5)
 ggplot(tiles,
-       aes(x=variable,
+       aes(x=Model,
            y=value,
           fill=variable))+geom_violin(scale='width')+
         scale_fill_MOCHA()+
