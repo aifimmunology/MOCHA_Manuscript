@@ -694,7 +694,7 @@ summarize_dist <- function(i){
     ggplot(dt,
            aes(x=tile,
                y=values,
-               fill=tile))+geom_boxplot(scale='width')+
+               fill=tile))+geom_violin(scale='width')+
             ggpubr::stat_compare_means()+
     theme_minimal()+
     theme(axis.text.x=element_blank(),
