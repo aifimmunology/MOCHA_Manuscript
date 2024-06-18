@@ -9,7 +9,7 @@
 # ###########################################################
 
 ## Load Libraries
-require(scMACS)
+require(MOCHA)
 require(data.table)
 require(ArchR)
 require(ggpubr)
@@ -45,21 +45,25 @@ idxSample <- BiocGenerics::which(ArchRProj$Sample %in% lookup_table$Sample)
 cellsSample <- ArchRProj$cellNames[idxSample]
 ArchRProj <- ArchRProj[cellsSample, ]
 
+
 ###########################################################
 # 2. Call open tiles (main peak calling step)
 #    and get sample-tile matrices
 #    for all specified cell populations
 ###########################################################
 
+
 tileResults <- callOpenTiles( 
     ArchRProj,
     cellPopLabel = "CellSubsets" ,
     cellPopulations = "CD16 Mono",
-    TxDb = TxDb,
-    Org = Org,
+    TxDb = "TxDb.Hsapiens.UCSC.hg38.refGene",
+    Org = "org.Hs.eg.db",
     numCores = 20,
+    outDir =NULL,
     studySignal = studySignal
 )
+
 
 ###########################################################
 # 3. Get consensus sample-tile matrices
@@ -69,16 +73,14 @@ tileResults <- callOpenTiles(
 #    primary input to downstream analyses.
 ###########################################################
 
-SampleTileMatrices <- scMACS::getSampleTileMatrix( 
+SampleTileMatrices <- getSampleTileMatrix( 
     tileResults,
     cellPopulations = "CD16 Mono",
     groupColumn = "COVID_status",
-    threshold = 0.2,
-    NAtoZero = TRUE,
-    log2Intensity = TRUE
+    threshold = 0.2
 )
 
-sampleTileMatrix <- scMACS::getCellPopMatrix(SampleTileMatrices, 'CD16 Mono')
+sampleTileMatrix <- MOCHA::getCellPopMatrix(SampleTileMatrices, 'CD16 Mono')
 
 ## subset ArchR Project
 group = ifelse(colnames(sampleTileMatrix)[1:39] %in% 
@@ -103,15 +105,14 @@ estimate_runtime <- function(tilesTested){
     tmp_sampleTileMatrix = SampleTileMatrices[idx]
       
     time <- system.time(
-         
+        
+        
         differentials <- getDifferentialAccessibleTiles(
             SampleTileObj = tmp_sampleTileMatrix,
             cellPopulation = "CD16 Mono",
             groupColumn = "COVID_status",
             foreground =  "Positive",
             background =  "Negative",
-            noiseThreshold=0,
-            minZeroDiff=0,
             fdrToDisplay = 0.2,
             outputGRanges = FALSE,
             numCores = 60
