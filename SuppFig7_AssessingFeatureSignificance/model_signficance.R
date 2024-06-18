@@ -18,7 +18,7 @@ source('/home/jupyter/covid/scMACS_manuscript_analyses/trainModel/helper_functio
 require(data.table)
 require(ggplot2)
 require(ggpubr)
-require(scMACS)
+require(MOCHA)
 library(data.table)
 library(ArchR)
 library(GenomicRanges)
@@ -40,7 +40,7 @@ cellType_sample <- paste(metadf$Sample, metadf$predictedGroup_Co2,sep='__')
 ### load NK fragment files 
 ### for entire NK population
 cell <- c('NK')
-frags <- getPopFrags(covidArchR, metaColumn = "predictedGroup_Co2", 
+frags <- getPopFrags(covidArchR, cellPopLabel = "predictedGroup_Co2", 
                      cellSubsets = cell, 
                      numCores= 30)
 NK_population <- frags[[1]]
@@ -57,8 +57,8 @@ ground_truth <- fread('/home/jupyter/covid/scMACS_manuscript_analyses/trainModel
 ## generate the genomic 
 ## region of interest for the
 ## analyses 
-FinalBins <- scMACS::determine_dynamic_range(SimpleList(frags),
-                                             covidArchR,
+FinalBins <- MOCHA:::determine_dynamic_range(NK_population,
+                                             getBlacklist(covidArchR),
                                              binSize=500, 
                                              doBin=FALSE)
 #rm(frags)
@@ -100,9 +100,9 @@ obtain_coefficients_for_subsample <- function(NK_population,
     
     intensities_list <- mclapply(1:length(cell_subsets),
            function(x) 
-               scMACS::calculate_intensities(fragMat=cell_subsets[[x]],
+               MOCHA:::calculate_intensities(fragMat=cell_subsets[[x]],
                                       candidatePeaks=FinalBins,
-                                      totalFrags=as.numeric(totalFrags_list[x])
+                                      totalFrags=totalFrags_list[x]
                                      ),
                                  mc.cores=numCores
                                  )
@@ -187,6 +187,7 @@ model100 = obtain_coefficients_for_subsample(NK_population,
                                               numCells=100,
                                               numReplicates=100,
                                               numCores=5)
+
 
 
 setwd('/home/jupyter/MOCHA_Revision/model_coefficients')
