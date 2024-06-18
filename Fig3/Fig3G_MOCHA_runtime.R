@@ -114,9 +114,25 @@ estimate_runtime <- function(tilesTested){
             foreground =  "Positive",
             background =  "Negative",
             fdrToDisplay = 0.2,
+            signalThreshold=0,
+            minZeroDiff=0,
             outputGRanges = FALSE,
             numCores = 60
         )
+
+         
+        # differentials <- getDifferentialAccessibleTiles(
+        #     SampleTileObj = tmp_sampleTileMatrix,
+        #     cellPopulation = "CD16 Mono",
+        #     groupColumn = "COVID_status",
+        #     foreground =  "Positive",
+        #     background =  "Negative",
+        #     noiseThreshold=0,
+        #     minZeroDiff=0,
+        #     fdrToDisplay = 0.2,
+        #     outputGRanges = FALSE,
+        #     numCores = 60
+        # )
         
     )
     
