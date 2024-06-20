@@ -15,16 +15,17 @@
 ############################################################
 setwd('/home/jupyter/scATAC_Supplements')
 source('ArchR_Export_ATAC_Data.R')
-source('/home/jupyter/getPopFrags_v3.R')
+#source('/home/jupyter/getPopFrags_v3.R')
 
 require(data.table)
 require(ggplot2)
 require(ggpubr)
-require(scMACS)
+require(MOCHA)
 library(data.table)
 library(ArchR)
 library(GenomicRanges)
 library(plyranges)
+library(parallel)
 
 # Load the ArchR Project
 lp_ArchRProject <- loadArchRProject("/home/jupyter/longPilot")
@@ -78,8 +79,12 @@ for(cell in celltypes){
     print(cell)
     cellTypesToExport = unique(cellType[cellType == cell])
     
-    frags <- scMACS::getPopFrags(lp_ArchRProject, metaColumn = cellColName, 
-                         cellSubsets = cellTypesToExport, 
+    # frags <- scMACS::getPopFrags(lp_ArchRProject, metaColumn = cellColName, 
+    #                      cellSubsets = cellTypesToExport, 
+    #                      numCores= 30)
+    
+    frags <- MOCHA::getPopFrags(lp_ArchRProject, cellPopLabel = cellColName, 
+                         cellSubsets = cellTypesToExport, poolSamples=T,
                          numCores= 30)
     
     cell_transformed <- gsub(' ','.', cell)

@@ -20,7 +20,9 @@ source('ArchR_Export_ATAC_Data.R')
 require(data.table)
 require(ggplot2)
 require(ggpubr)
-require(scMACS)
+require(MOCHA)
+require(parellel)
+
 library(data.table)
 library(ArchR)
 library(GenomicRanges)
@@ -95,9 +97,13 @@ for(cell in celltypes){
     print(cell)
     cellTypesToExport = unique(cellType[cellType == cell])
     
-    frags <- scMACS::getPopFrags(boneMarrow_ArchRProject, 
-                                 metaColumn = "predictedGroup", 
-                         cellSubsets = cellTypesToExport, 
+    # frags <- scMACS::getPopFrags(boneMarrow_ArchRProject, 
+    #                              metaColumn = "predictedGroup", 
+    #                      cellSubsets = cellTypesToExport, 
+    #                      numCores= 30)
+    
+    frags <- MOCHA::getPopFrags(boneMarrow_ArchRProject, cellPopLabel =  "predictedGroup", 
+                         cellSubsets = cellTypesToExport, poolSamples=T,
                          numCores= 30)
     
     cell_transformed <- gsub(' ','.', cell)

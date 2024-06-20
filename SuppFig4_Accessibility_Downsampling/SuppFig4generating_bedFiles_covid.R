@@ -5,7 +5,7 @@
 ############################################################
 setwd('/home/jupyter/scATAC_Supplements')
 source('ArchR_Export_ATAC_Data.R')
-source('/home/jupyter/scMACS/R/utils.R')
+#source('/home/jupyter/scMACS/R/utils.R')
 
 require(data.table)
 require(ggplot2)
