@@ -1,16 +1,6 @@
 # ###########################################################
 # ###########################################################
 
-# Author: Samir Rachid Zaim
-# Date: 11/06/2021
-
-# Desc: 
-#     This script generates the 
-#     bedfiles used as inputs for
-#     macs2, homer, and hmmratac 
-#     to create those comparisons 
-#     with scMACS.
-
 ############################################################
 ############################################################
 setwd('/home/jupyter/scATAC_Supplements')
@@ -20,10 +10,11 @@ source('/home/jupyter/scMACS/R/utils.R')
 require(data.table)
 require(ggplot2)
 require(ggpubr)
-require(scMACS)
+require(MOCHA)
 library(data.table)
 library(ArchR)
 library(GenomicRanges)
+require(parallel)
 library(plyranges)
 
 # Load the ArchR Project
@@ -67,8 +58,8 @@ for(cell in celltypes){
     pryr::mem_used()
     print(cell)
     cellTypesToExport = cell
-    frags <- getPopFrags(covidArchR, metaColumn = "CellSubsets", 
-                         cellSubsets = cellTypesToExport, 
+    frags <- MOCHA::getPopFrags(covidArchR, cellPopLabel = "CellSubsets", 
+                         cellSubsets = cellTypesToExport, poolSamples=T,
                          numCores= 10)
     
     cell_transformed <- gsub(' ','.', cell)
